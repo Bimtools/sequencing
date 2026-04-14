@@ -26,7 +26,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-import { Layout, Typography, List, Card } from "antd";
+import { Layout, Typography, List, Card, Space, Input, Button } from "antd";
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 
@@ -56,13 +56,8 @@ function App() {
   const loading = useSelector((state) => state.drawing.pending);
   const [asm, setAsm] = useState();
   const [modelId, setModelId] = useState();
-
-  const [items, setItems] = useState([
-    "First task",
-    "Second task",
-    "Third task",
-    "Fourth task",
-  ]);
+  const [step, setStep] = useState("");
+  const [items, setItems] = useState([]);
 
   const onDragEnd = (event) => {
     const { active, over } = event;
@@ -179,18 +174,18 @@ function App() {
         </Title>
       </Header>
       <Content>
-        <List
-          dataSource={items}
-          renderItem={(item, index) => (
-            <SortableItem key={item} id={item}>
-              <List.Item>
-                <MenuOutlined style={{ marginRight: 12 }} />
-                <strong>{index + 1}.</strong>&nbsp;{item}
-              </List.Item>
-            </SortableItem>
-          )}
-        />
-        {/* <Card style={{ background: "#67bed9" }}>
+        <Card>
+          <div style={{ display: "flex", width: "100%", gap: 5 }}>
+            <Input
+              style={{ flex: 1 }}
+              placeholder="Enter Step"
+              value={step}
+              onChange={(e) => setStep(e.target.value)}
+            />
+            <Button type="primary" onClick={() => setItems([...items, step])}>
+              Create
+            </Button>
+          </div>
           <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext
               items={items}
@@ -200,16 +195,22 @@ function App() {
                 dataSource={items}
                 renderItem={(item, index) => (
                   <SortableItem key={item} id={item}>
-                    <List.Item>
-                      <MenuOutlined style={{ marginRight: 12 }} />
-                      <strong>{index + 1}.</strong>&nbsp;{item}
+                    <List.Item
+                      style={{
+                        marginTop: 2,
+                        border: "1px solid #ccc",
+                        borderRadius: 10,
+                      }}
+                    >
+                      <MenuOutlined style={{ marginLeft: 10 }} />
+                      <strong> {index + 1}. </strong>&nbsp;{item}
                     </List.Item>
                   </SortableItem>
                 )}
               />
             </SortableContext>
           </DndContext>
-        </Card> */}
+        </Card>
       </Content>
     </Layout>
   );
