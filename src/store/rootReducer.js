@@ -1,6 +1,6 @@
 import { combineReducers } from "redux";
-import drawingReducer from "./drawing/reducer";
+import sequenceReducer from "./sequence/reducer";
 const rootReducer = combineReducers({
-  drawing: drawingReducer,
+  sequence: sequenceReducer,
 });
 export default rootReducer;

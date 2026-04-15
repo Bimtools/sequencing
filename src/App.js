@@ -4,13 +4,6 @@ import * as WorkspaceAPI from "trimble-connect-workspace-api";
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
-  GetDrawingRequest,
-  UpdateViewVisibilityRequest,
-  GetTrbModelRequest,
-  GetAnnIdRequest,
-  ShowAnnRequest,
-} from "./store/drawing/action";
-import {
   ScissorOutlined,
   EyeInvisibleFilled,
   EyeFilled,
@@ -27,6 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import { Layout, Typography, List, Card, Space, Input, Button } from "antd";
+import { GetFolderRequest, CreateFolderRequest } from "./store/sequence/action";
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 
@@ -49,121 +43,42 @@ function SortableItem({ id, children }) {
 
 function App() {
   const dispatch = useDispatch();
-  const views = useSelector((state) => state.drawing.payload);
-  const trimBimModels = useSelector((state) => state.drawing.trbModels);
-  const annIds = useSelector((state) => state.drawing.annIds);
-  const showAnn = useSelector((state) => state.drawing.showAnn);
-  const loading = useSelector((state) => state.drawing.pending);
-  const [asm, setAsm] = useState();
-  const [modelId, setModelId] = useState();
+  const sequences = useSelector((state) => state.sequence.sequences);
+  const rootFolderId = useSelector((state) => state.sequence.rootFolderId);
+  const rootCommentId = useSelector((state) => state.sequence.rootCommentId);
+  const [projectId, setProjectId] = useState("");
+  const [projectName, setProjectName] = useState("");
   const [step, setStep] = useState("");
-  const [items, setItems] = useState([]);
 
   const onDragEnd = (event) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      setItems((prev) => {
-        const oldIndex = prev.indexOf(active.id);
-        const newIndex = prev.indexOf(over.id);
-        return arrayMove(prev, oldIndex, newIndex);
-      });
+      // setItems((prev) => {
+      //   const oldIndex = prev.indexOf(active.id);
+      //   const newIndex = prev.indexOf(over.id);
+      //   return arrayMove(prev, oldIndex, newIndex);
+      // });
     }
   };
 
-  async function fetchData() {
-    const tcapi = await WorkspaceAPI.connect(window.parent);
-    const token = await tcapi.extension.requestPermission("accesstoken");
-    window.localStorage.setItem("trimbleToken", token);
-    const url = window.location.href;
-    const propertyString = url.split("?")[1];
-    const ifcGuid = propertyString?.split("ibim")[0];
-    const fId = propertyString?.split("ibim")[1];
-    if (!ifcGuid) {
-      return;
+  useEffect(() => {
+    async function fetchStatus() {
+      const tcapi = await WorkspaceAPI.connect(window.parent);
+      const token = await tcapi.extension.requestPermission("accesstoken");
+      window.localStorage.setItem("trimbleToken", token);
+      const project = await tcapi.project.getProject();
+      setProjectId(project.id);
+      setProjectName(project.name);
+      dispatch(
+        GetFolderRequest({
+          projectId: project.id,
+          projectName: project.name,
+        }),
+      );
     }
-    if (ifcGuid.length !== 22) {
-      return;
-    }
-    if (!fId) {
-      return;
-    }
-    dispatch(
-      GetDrawingRequest({
-        id: fId,
-      }),
-    );
-
-    var models;
-    do {
-      models = await tcapi.viewer.getModels();
-    } while (models === undefined || models.length === 0);
-    var asm;
-    var modelId;
-    for (const model of models) {
-      const modelName = model.name;
-      if (modelName.indexOf(".trb") >= 0) {
-        console.log(modelName);
-        dispatch(
-          GetAnnIdRequest({
-            name: model.name,
-            modelId: model.id,
-          }),
-        );
-      }
-    }
-    for (const model of models) {
-      const modelName = model.name;
-      if (modelName.indexOf(".ifc") >= 0 || modelName.indexOf(".tekla") >= 0) {
-        const loadedModel = await tcapi.viewer.getLoadedModel(model.id);
-        console.log(loadedModel);
-        if (loadedModel === undefined) {
-          await tcapi.viewer.toggleModel(model.id, true, true);
-        }
-        var modelObjects;
-        do {
-          modelObjects = await tcapi.viewer.getObjects();
-        } while (modelObjects === undefined || modelObjects.length === 0);
-        const runtimeIds = await tcapi.viewer.convertToObjectRuntimeIds(
-          model.id,
-          [ifcGuid],
-        );
-        if (
-          runtimeIds !== undefined &&
-          runtimeIds.length > 0 &&
-          runtimeIds[0] >= 0
-        ) {
-          asm = runtimeIds[0];
-          modelId = model.id;
-          break;
-        }
-      }
-    }
-    setAsm(asm);
-    setModelId(modelId);
-    await tcapi.viewer.setSelection({
-      modelObjectIds: [
-        {
-          modelId: modelId,
-          objectRuntimeIds: [asm],
-        },
-      ],
-    });
-    await tcapi.viewer.isolateEntities([
-      {
-        modelId: modelId,
-        entityIds: [asm],
-      },
-    ]);
-    await tcapi.viewer.setCamera({
-      modelObjectIds: [
-        {
-          modelId: modelId,
-          objectRuntimeIds: [asm],
-        },
-      ],
-    });
-  }
+    fetchStatus();
+  }, []);
 
   React.useEffect(() => {}, []);
   return (
@@ -182,19 +97,32 @@ function App() {
               value={step}
               onChange={(e) => setStep(e.target.value)}
             />
-            <Button type="primary" onClick={() => setItems([...items, step])}>
+            <Button
+              type="primary"
+              onClick={() => {
+                dispatch(
+                  CreateFolderRequest({
+                    name: step,
+                    color: "#fff",
+                    rootFolderId: rootFolderId,
+                    rootCommentId: rootCommentId,
+                    sequences: sequences,
+                  }),
+                );
+              }}
+            >
               Create
             </Button>
           </div>
           <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd}>
             <SortableContext
-              items={items}
+              items={sequences}
               strategy={verticalListSortingStrategy}
             >
               <List
-                dataSource={items}
+                dataSource={sequences}
                 renderItem={(item, index) => (
-                  <SortableItem key={item} id={item}>
+                  <SortableItem key={item.id} id={item.id}>
                     <List.Item
                       style={{
                         marginTop: 2,
@@ -203,7 +131,7 @@ function App() {
                       }}
                     >
                       <MenuOutlined style={{ marginLeft: 10 }} />
-                      <strong> {index + 1}. </strong>&nbsp;{item}
+                      <strong> {index + 1}. </strong>&nbsp;{item.name}
                     </List.Item>
                   </SortableItem>
                 )}
