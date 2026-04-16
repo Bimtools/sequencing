@@ -8,20 +8,20 @@ import {
   fork,
 } from "redux-saga/effects";
 import {
-  CreateFolderSuccess,
-  DeleteFolderSuccess,
-  GetFolderSuccess,
-  CreateFolderFailure,
-  DeleteFolderFailure,
-  GetFolderFailure,
+  CreateSequenceSuccess,
+  CreateSequenceFailure,
+  DeleteSequenceFailure,
+  DeleteSequenceSuccess,
   UpdateCommentSuccess,
   UpdateCommentFailure,
   SetObjectsSuccess,
   SetObjectsFailure,
+  GetSequenceSuccess,
+  GetSequenceFailure,
 } from "./action";
 import instance from "../../interceptors/axios";
 
-function* getFolderSaga(action) {
+function* getSequenceSaga(action) {
   try {
     //Check Sequence Folder
     const getFolderUrl = `/folders/by_path?path=${action.payload.projectName}&projectId=${action.payload.projectId}`;
@@ -34,7 +34,7 @@ function* getFolderSaga(action) {
         parentId: response.data[0].parentId,
       });
       yield put(
-        GetFolderSuccess({
+        GetSequenceSuccess({
           folderId: insertFolderResponse.data.id,
           folders: [],
         }),
@@ -48,21 +48,43 @@ function* getFolderSaga(action) {
           ? commentResponse.data[0].description
           : "[]",
       );
+
+      const sequenceObjects = [];
+      for (const sequence of sequences) {
+        const getSequenceCommentUrl = `/comments?objectId=${sequence.id}&objectType=FOLDER`;
+        const sequenceCommentResponse = yield call(
+          instance.get,
+          getSequenceCommentUrl,
+        );
+        const contents = sequenceCommentResponse.data.map((x) => {
+          return {
+            id: x.description.split("tuan")[0],
+            content: x.description.split("tuan")[1],
+          };
+        });
+        contents.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+        const content = contents.map((x) => x.content).join("");
+        const objects = JSON.parse(content.length > 0 ? content : "[]");
+        console.log("objects", objects);
+        sequenceObjects.push({ folderId: sequence.id, objects: objects });
+      }
+      console.log("sequenceObjects", sequenceObjects);
       yield put(
-        GetFolderSuccess({
+        GetSequenceSuccess({
           commentId:
             commentResponse.data.length > 0 ? commentResponse.data[0].id : null,
           folderId: folders[0].id,
-          folders: sequences,
+          sequences: sequences,
+          sequenceObjects: sequenceObjects,
         }),
       );
     }
   } catch (error) {
     console.error("Error fetching folder:", error);
-    yield put(GetFolderFailure(error.message));
+    yield put(GetSequenceFailure(error.message));
   }
 }
-function* createFolderSaga(action) {
+function* createSequenceSaga(action) {
   const insertFolderUrl = `/folders`;
   console.log(action.payload);
   const insertFolderBody = {
@@ -89,9 +111,16 @@ function* createFolderSaga(action) {
         description: JSON.stringify(newSequences),
       });
       yield put(
-        CreateFolderSuccess({
+        CreateSequenceSuccess({
           rootCommentId: action.payload.rootCommentId,
-          folders: [...action.payload.sequences, newSequence],
+          sequences: [...action.payload.sequences, newSequence],
+          sequenceObjects: [
+            ...action.payload.sequenceObjects,
+            {
+              folderId: newSequence.id,
+              objectIds: [],
+            },
+          ],
         }),
       );
     } else {
@@ -109,15 +138,22 @@ function* createFolderSaga(action) {
         createCommentBody,
       );
       yield put(
-        CreateFolderSuccess({
+        CreateSequenceSuccess({
           rootCommentId: responseInsertComment.data.id,
-          folders: [...action.payload.sequences, newSequence],
+          sequences: [...action.payload.sequences, newSequence],
+          sequenceObjects: [
+            ...action.payload.sequenceObjects,
+            {
+              folderId: newSequence.id,
+              objectIds: [],
+            },
+          ],
         }),
       );
     }
   } catch (error) {
     console.error("Error creating folder:", error);
-    yield put(CreateFolderFailure(error.message));
+    yield put(CreateSequenceFailure(error.message));
   }
 }
 function* updateCommentSaga(action) {
@@ -153,6 +189,9 @@ function* deleteSequenceSaga(action) {
       const newSequences = action.payload.sequences.filter(
         (x) => x.id !== action.payload.folderId,
       );
+      const newSequenceObjects = action.payload.sequenceObjects.filter(
+        (x) => x.folderId !== action.payload.folderId,
+      );
 
       //Update comment with new sequence list
       const updateCommentUrl = `/comments/${action.payload.rootCommentId}`;
@@ -160,32 +199,64 @@ function* deleteSequenceSaga(action) {
         description: JSON.stringify(newSequences),
       });
       yield put(
-        DeleteFolderSuccess({
-          folders: [...newSequences],
+        DeleteSequenceSuccess({
+          sequences: [...newSequences],
+          sequenceObjects: [...newSequenceObjects],
         }),
       );
     } else {
-      yield put(DeleteFolderFailure("Failed to delete folder"));
+      yield put(DeleteSequenceFailure("Failed to delete sequence"));
     }
   } catch (error) {
     console.error("Error updating comment:", error);
-    yield put(DeleteFolderFailure(error.message));
+    yield put(DeleteSequenceFailure(error.message));
   }
 }
 function* setObjectsSaga(action) {
   try {
+    console.log("Set objects saga", action.payload);
+    const newSequenceObjects = [];
+    action.payload.sequenceObjects.forEach((item) => {
+      if (item.folderId === action.payload.newObject.folderId) {
+        const newObjects = [
+          ...item.objects,
+          ...action.payload.newObject.objects,
+        ];
+        newSequenceObjects.push({
+          folderId: item.folderId,
+          objects: newObjects,
+        });
+      } else {
+        newSequenceObjects.push(item);
+      }
+    });
+    //Get all comments
+    const getCommentUrl = `/comments?objectId=${action.payload.newObject.folderId}&objectType=FOLDER`;
+    const commentResponse = yield call(instance.get, getCommentUrl);
+
+    for (const comment of commentResponse.data) {
+      const deleteCommentUrl = `/comments/${comment.id}`;
+      console.log("Deleting comment with id", comment.id);
+      yield call(instance.delete, deleteCommentUrl);
+    }
+
     //Create comment with sequence list
-    const stringContent = JSON.stringify(action.payload.sequence.objectIds);
+    const sequenceObjectsByFolderId = newSequenceObjects.find(
+      (x) => x.folderId === action.payload.newObject.folderId,
+    );
+    const stringContent = JSON.stringify(sequenceObjectsByFolderId);
     var startIndex = 0;
     var step = 800;
+    var chunkIndex = 0;
     const createCommentUrl = `/comments`;
     while (startIndex < stringContent.length) {
       const chunk = stringContent.substring(startIndex, startIndex + step);
       startIndex += step;
+      chunkIndex++;
       const createCommentBody = {
-        objectId: action.payload.sequence.folderId,
+        objectId: action.payload.newObject.folderId,
         objectType: "FOLDER",
-        description: chunk,
+        description: chunkIndex + "tuan" + chunk,
       };
       const responseInsertComment = yield call(
         instance.post,
@@ -193,7 +264,7 @@ function* setObjectsSaga(action) {
         createCommentBody,
       );
     }
-    yield put(SetObjectsSuccess(action.payload.sequence));
+    yield put(SetObjectsSuccess(newSequenceObjects));
   } catch (error) {
     console.error("Error creating folder:", error);
     yield put(SetObjectsFailure(error.message));
@@ -201,10 +272,10 @@ function* setObjectsSaga(action) {
 }
 
 function* sequenceSaga() {
-  yield takeEvery("DELETE_FOLDER_REQUEST", deleteSequenceSaga);
+  yield takeEvery("DELETE_SEQUENCE_REQUEST", deleteSequenceSaga);
   yield takeEvery("UPDATE_COMMENT_REQUEST", updateCommentSaga);
-  yield takeEvery("CREATE_FOLDER_REQUEST", createFolderSaga);
-  yield takeEvery("GET_FOLDER_REQUEST", getFolderSaga);
+  yield takeEvery("CREATE_SEQUENCE_REQUEST", createSequenceSaga);
+  yield takeEvery("GET_SEQUENCE_REQUEST", getSequenceSaga);
   yield takeEvery("SET_OBJECTS_REQUEST", setObjectsSaga);
 }
 export default sequenceSaga;

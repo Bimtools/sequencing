@@ -1,58 +1,58 @@
 import * as actionType from './actionTypes'
 
-export function CreateFolderRequest(payload){
+export function CreateSequenceRequest(payload){
     return{
-        type:actionType.CREATE_FOLDER_REQUEST,
+        type:actionType.CREATE_SEQUENCE_REQUEST,
         payload:payload
     }
 }
-export function CreateFolderSuccess(payload){
+export function CreateSequenceSuccess(payload){
     return{
-        type:actionType.CREATE_FOLDER_SUCCESS,
+        type:actionType.CREATE_SEQUENCE_SUCCESS,
         payload:payload
     }
 }
-export function CreateFolderFailure(payload){
+export function CreateSequenceFailure(payload){
     return{
-        type:actionType.CREATE_FOLDER_FAILURE,
-        payload:payload
-    }
-}
-
-export function GetFolderRequest(payload){
-    return{
-        type:actionType.GET_FOLDER_REQUEST,
-        payload:payload
-    }
-}
-export function GetFolderSuccess(payload){
-    return{
-        type:actionType.GET_FOLDER_SUCCESS,
-        payload:payload
-    }
-}
-export function GetFolderFailure(payload){
-    return{
-        type:actionType.GET_FOLDER_FAILURE,
+        type:actionType.CREATE_SEQUENCE_FAILURE,
         payload:payload
     }
 }
 
-export function DeleteFolderRequest(payload){
+export function GetSequenceRequest(payload){
     return{
-        type:actionType.DELETE_FOLDER_REQUEST,
+        type:actionType.GET_SEQUENCE_REQUEST,
         payload:payload
     }
 }
-export function DeleteFolderSuccess(payload){
+export function GetSequenceSuccess(payload){
     return{
-        type:actionType.DELETE_FOLDER_SUCCESS,
+        type:actionType.GET_SEQUENCE_SUCCESS,
         payload:payload
     }
 }
-export function DeleteFolderFailure(payload){
+export function GetSequenceFailure(payload){
     return{
-        type:actionType.DELETE_FOLDER_FAILURE,
+        type:actionType.GET_SEQUENCE_FAILURE,
+        payload:payload
+    }
+}
+
+export function DeleteSequenceRequest(payload){
+    return{
+        type:actionType.DELETE_SEQUENCE_REQUEST,
+        payload:payload
+    }
+}
+export function DeleteSequenceSuccess(payload){
+    return{
+        type:actionType.DELETE_SEQUENCE_SUCCESS,
+        payload:payload
+    }
+}
+export function DeleteSequenceFailure(payload){
+    return{
+        type:actionType.DELETE_SEQUENCE_FAILURE,
         payload:payload
     }
 }

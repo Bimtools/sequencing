@@ -8,6 +8,7 @@ import {
   DeleteFilled,
   PlusOutlined,
   MinusOutlined,
+  PlayCircleOutlined
 } from "@ant-design/icons";
 
 import { DndContext, closestCenter } from "@dnd-kit/core";
@@ -28,11 +29,12 @@ import {
   Popconfirm,
 } from "antd";
 import {
-  GetFolderRequest,
-  CreateFolderRequest,
+  GetSequenceRequest,
+  CreateSequenceRequest,
   UpdateCommentRequest,
   DeleteFolderRequest,
-  SetObjectsRequest
+  SetObjectsRequest,
+  DeleteSequenceRequest,
 } from "./store/sequence/action";
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -58,6 +60,9 @@ function App() {
   const dispatch = useDispatch();
   const sequenceState = useSelector((state) => state.sequence);
   const sequences = useSelector((state) => state.sequence.sequences);
+  const sequenceObjects = useSelector(
+    (state) => state.sequence.sequenceObjects,
+  );
   const rootFolderId = useSelector((state) => state.sequence.rootFolderId);
   const rootCommentId = useSelector((state) => state.sequence.rootCommentId);
   const [projectId, setProjectId] = useState("");
@@ -91,7 +96,7 @@ function App() {
       setProjectId(project.id);
       setProjectName(project.name);
       dispatch(
-        GetFolderRequest({
+        GetSequenceRequest({
           projectId: project.id,
           projectName: project.name,
         }),
@@ -121,12 +126,13 @@ function App() {
               type="primary"
               onClick={() => {
                 dispatch(
-                  CreateFolderRequest({
+                  CreateSequenceRequest({
                     name: step,
                     color: "#fff",
                     rootFolderId: rootFolderId,
                     rootCommentId: rootCommentId,
                     sequences: sequences,
+                    sequenceObjects: sequenceObjects,
                   }),
                 );
               }}
@@ -182,12 +188,16 @@ function App() {
                           objectIds: obj.objectRuntimeIds,
                         };
                       });
-                      const setObjectsBody = {
+                      const newObject = {
                         folderId: item.id,
-                        objectIds: selectedObjects,
+                        objects: selectedObjects,
                       };
-                      console.log("setObjectsBody", setObjectsBody);
-                      dispatch(SetObjectsRequest(setObjectsBody));
+                      dispatch(
+                        SetObjectsRequest({
+                          sequenceObjects: sequenceObjects,
+                          newObject: newObject,
+                        }),
+                      );
                     }}
                   />
                   <Popconfirm
@@ -200,7 +210,7 @@ function App() {
                         folderId: item.id,
                       };
                       console.log("deleteSequenceBody", deleteSequenceBody);
-                      dispatch(DeleteFolderRequest(deleteSequenceBody));
+                      dispatch(DeleteSequenceRequest(deleteSequenceBody));
                     }}
                     okText="Yes"
                     cancelText="No"
@@ -211,6 +221,14 @@ function App() {
               </List.Item>
             )}
           />
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: 8,
+            }}
+          ><Button type="text" size="large" icon={<PlayCircleOutlined />} /></div>
         </Card>
       </Content>
     </Layout>

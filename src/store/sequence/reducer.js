@@ -9,55 +9,58 @@ const initialState = {
 };
 const reducers = (state = initialState, action) => {
   switch (action.type) {
-    case type.CREATE_FOLDER_REQUEST:
+    case type.CREATE_SEQUENCE_REQUEST:
       return {
         ...state,
         pending: true,
       };
-    case type.CREATE_FOLDER_SUCCESS:
+    case type.CREATE_SEQUENCE_SUCCESS:
       return {
         ...state,
         pending: false,
         rootCommentId: action.payload.rootCommentId,
-        sequences: [...action.payload.folders],
+        sequences: [...action.payload.sequences],
+        sequenceObjects: [...action.payload.sequenceObjects],
       };
-    case type.CREATE_FOLDER_FAILURE:
+    case type.CREATE_SEQUENCE_FAILURE:
       return {
         ...state,
         pending: false,
         error: action.payload,
       };
-    case type.GET_FOLDER_REQUEST:
+    case type.GET_SEQUENCE_REQUEST:
       return {
         ...state,
         pending: true,
       };
-    case type.GET_FOLDER_SUCCESS:
+    case type.GET_SEQUENCE_SUCCESS:
       return {
         ...state,
         pending: false,
         rootCommentId: action.payload.commentId,
         rootFolderId: action.payload.folderId,
-        sequences: [...action.payload.folders],
+        sequences: [...action.payload.sequences],
+        sequenceObjects: [...action.payload.sequenceObjects],
       };
-    case type.GET_FOLDER_FAILURE:
+    case type.GET_SEQUENCE_FAILURE:
       return {
         ...state,
         pending: false,
         error: action.error,
       };
-    case type.DELETE_FOLDER_REQUEST:
+    case type.DELETE_SEQUENCE_REQUEST:
       return {
         ...state,
         pending: true,
       };
-    case type.DELETE_FOLDER_SUCCESS:
+    case type.DELETE_SEQUENCE_SUCCESS:
       return {
         ...state,
         pending: false,
-        sequences: [...action.payload.folders],
+        sequences: [...action.payload.sequences],
+        sequenceObjects: [...action.payload.sequenceObjects],
       };
-    case type.DELETE_FOLDER_FAILURE:
+    case type.DELETE_SEQUENCE_FAILURE:
       return {
         ...state,
         pending: false,
@@ -86,20 +89,12 @@ const reducers = (state = initialState, action) => {
         pending: true,
       };
     case type.SET_OBJECTS_SUCCESS:
-      const updatedSequences = state.sequences.map((sequence) => {
-        if (sequence.folderId === action.payload.folderId) {
-          return {
-            ...sequence,
-            objects: [...sequence.objectIds, ...action.payload.objectIds],
-          };
-        }
-        return sequence;
-      });
       return {
-        ...state,
-        pending: false,
-        sequences: updatedSequences,
-      };
+          ...state,
+          pending: false,
+          sequenceObjects: action.payload,
+        };
+
     case type.SET_OBJECTS_FAILURE:
       return {
         ...state,
