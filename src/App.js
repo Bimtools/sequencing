@@ -4,10 +4,10 @@ import * as WorkspaceAPI from "trimble-connect-workspace-api";
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
-  ScissorOutlined,
-  EyeInvisibleFilled,
-  EyeFilled,
   MenuOutlined,
+  DeleteFilled,
+  PlusOutlined,
+  MinusOutlined,
 } from "@ant-design/icons";
 
 import { DndContext, closestCenter } from "@dnd-kit/core";
@@ -18,9 +18,22 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-
-import { Layout, Typography, List, Card, Space, Input, Button } from "antd";
-import { GetFolderRequest, CreateFolderRequest } from "./store/sequence/action";
+import {
+  Layout,
+  Typography,
+  List,
+  Card,
+  Input,
+  Button,
+  Popconfirm,
+} from "antd";
+import {
+  GetFolderRequest,
+  CreateFolderRequest,
+  UpdateCommentRequest,
+  DeleteFolderRequest,
+  SetObjectsRequest
+} from "./store/sequence/action";
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 
@@ -43,6 +56,7 @@ function SortableItem({ id, children }) {
 
 function App() {
   const dispatch = useDispatch();
+  const sequenceState = useSelector((state) => state.sequence);
   const sequences = useSelector((state) => state.sequence.sequences);
   const rootFolderId = useSelector((state) => state.sequence.rootFolderId);
   const rootCommentId = useSelector((state) => state.sequence.rootCommentId);
@@ -52,13 +66,19 @@ function App() {
 
   const onDragEnd = (event) => {
     const { active, over } = event;
-
     if (over && active.id !== over.id) {
-      // setItems((prev) => {
-      //   const oldIndex = prev.indexOf(active.id);
-      //   const newIndex = prev.indexOf(over.id);
-      //   return arrayMove(prev, oldIndex, newIndex);
-      // });
+      const newArray = (prev) => {
+        const oldIndex = prev.findIndex((x) => x.id === active.id);
+        const newIndex = prev.findIndex((x) => x.id === over.id);
+        return arrayMove(prev, oldIndex, newIndex);
+      };
+      const newSequences = newArray(sequences);
+      dispatch(
+        UpdateCommentRequest({
+          commentId: rootCommentId,
+          sequences: newSequences,
+        }),
+      );
     }
   };
 
@@ -85,7 +105,7 @@ function App() {
     <Layout style={{ height: "100vh" }}>
       <Header style={{ background: "#fff", height: "auto" }}>
         <Title level={4} style={{ margin: 0, alignContent: "center" }}>
-          Test
+          Sequencing
         </Title>
       </Header>
       <Content>
@@ -114,30 +134,83 @@ function App() {
               Create
             </Button>
           </div>
-          <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext
-              items={sequences}
-              strategy={verticalListSortingStrategy}
-            >
-              <List
-                dataSource={sequences}
-                renderItem={(item, index) => (
-                  <SortableItem key={item.id} id={item.id}>
-                    <List.Item
-                      style={{
-                        marginTop: 2,
-                        border: "1px solid #ccc",
-                        borderRadius: 10,
-                      }}
-                    >
-                      <MenuOutlined style={{ marginLeft: 10 }} />
-                      <strong> {index + 1}. </strong>&nbsp;{item.name}
-                    </List.Item>
-                  </SortableItem>
-                )}
-              />
-            </SortableContext>
-          </DndContext>
+          <List
+            loading={sequenceState.pending}
+            dataSource={sequences}
+            renderItem={(item, index) => (
+              <List.Item
+                style={{
+                  marginTop: 2,
+                  border: "1px solid #ccc",
+                  borderRadius: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  paddingRight: 12,
+                }}
+                occlick={() => {
+                  console.log("click step", item);
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <MenuOutlined style={{ marginLeft: 10 }} />
+                  <strong>{index + 1}. </strong>
+                  <span>{item.name}</span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Button
+                    type="text"
+                    icon={<PlusOutlined />}
+                    onClick={async () => {
+                      const tcapi = await WorkspaceAPI.connect(window.parent);
+                      const selection = await tcapi.viewer.getSelection();
+                      const selectedObjects = selection.map((obj) => {
+                        return {
+                          modelId: obj.modelId,
+                          objectIds: obj.objectRuntimeIds,
+                        };
+                      });
+                      const setObjectsBody = {
+                        folderId: item.id,
+                        objectIds: selectedObjects,
+                      };
+                      console.log("setObjectsBody", setObjectsBody);
+                      dispatch(SetObjectsRequest(setObjectsBody));
+                    }}
+                  />
+                  <Popconfirm
+                    title="Delete the step"
+                    description="Are you sure to delete this step?"
+                    onConfirm={() => {
+                      const deleteSequenceBody = {
+                        rootCommentId: rootCommentId,
+                        sequences: sequences,
+                        folderId: item.id,
+                      };
+                      console.log("deleteSequenceBody", deleteSequenceBody);
+                      dispatch(DeleteFolderRequest(deleteSequenceBody));
+                    }}
+                    okText="Yes"
+                    cancelText="No"
+                  >
+                    <Button danger type="text" icon={<DeleteFilled />} />
+                  </Popconfirm>
+                </div>
+              </List.Item>
+            )}
+          />
         </Card>
       </Content>
     </Layout>

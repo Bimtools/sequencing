@@ -113,3 +113,41 @@ export function DeleteCommentFailure(payload){
         payload:payload
     }
 }
+
+export function UpdateCommentRequest(payload){
+    return{
+        type:actionType.UPDATE_COMMENT_REQUEST,
+        payload:payload
+    }
+}
+export function UpdateCommentSuccess(payload){
+    return{
+        type:actionType.UPDATE_COMMENT_SUCCESS,
+        payload:payload
+    }
+}
+export function UpdateCommentFailure(payload){
+    return{
+        type:actionType.UPDATE_COMMENT_FAILURE,
+        payload:payload
+    }
+}
+
+export function SetObjectsRequest(payload){
+    return{
+        type:actionType.SET_OBJECTS_REQUEST,
+        payload:payload
+    }
+}
+export function SetObjectsSuccess(payload){
+    return{
+        type:actionType.SET_OBJECTS_SUCCESS,
+        payload:payload
+    }
+}
+export function SetObjectsFailure(payload){
+    return{
+        type:actionType.SET_OBJECTS_FAILURE,
+        payload:payload
+    }
+}

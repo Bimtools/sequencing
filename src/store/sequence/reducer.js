@@ -3,7 +3,7 @@ const initialState = {
   rootFolderId: null,
   rootCommentId: null,
   sequences: [],
-  sequenceObjects:[],
+  sequenceObjects: [],
   pending: false,
   error: null,
 };
@@ -36,10 +36,71 @@ const reducers = (state = initialState, action) => {
       return {
         ...state,
         pending: false,
+        rootCommentId: action.payload.commentId,
         rootFolderId: action.payload.folderId,
         sequences: [...action.payload.folders],
       };
     case type.GET_FOLDER_FAILURE:
+      return {
+        ...state,
+        pending: false,
+        error: action.error,
+      };
+    case type.DELETE_FOLDER_REQUEST:
+      return {
+        ...state,
+        pending: true,
+      };
+    case type.DELETE_FOLDER_SUCCESS:
+      return {
+        ...state,
+        pending: false,
+        sequences: [...action.payload.folders],
+      };
+    case type.DELETE_FOLDER_FAILURE:
+      return {
+        ...state,
+        pending: false,
+        error: action.error,
+      };
+    case type.UPDATE_COMMENT_REQUEST:
+      return {
+        ...state,
+        pending: true,
+      };
+    case type.UPDATE_COMMENT_SUCCESS:
+      return {
+        ...state,
+        pending: false,
+        sequences: [...action.payload.folders],
+      };
+    case type.UPDATE_COMMENT_FAILURE:
+      return {
+        ...state,
+        pending: false,
+        error: action.error,
+      };
+    case type.SET_OBJECTS_REQUEST:
+      return {
+        ...state,
+        pending: true,
+      };
+    case type.SET_OBJECTS_SUCCESS:
+      const updatedSequences = state.sequences.map((sequence) => {
+        if (sequence.folderId === action.payload.folderId) {
+          return {
+            ...sequence,
+            objects: [...sequence.objectIds, ...action.payload.objectIds],
+          };
+        }
+        return sequence;
+      });
+      return {
+        ...state,
+        pending: false,
+        sequences: updatedSequences,
+      };
+    case type.SET_OBJECTS_FAILURE:
       return {
         ...state,
         pending: false,
