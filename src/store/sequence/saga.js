@@ -215,23 +215,10 @@ function* deleteSequenceSaga(action) {
 function* setObjectsSaga(action) {
   try {
     console.log("Set objects saga", action.payload);
-    const newSequenceObjects = [];
-    action.payload.sequenceObjects.forEach((item) => {
-      if (item.folderId === action.payload.newObject.folderId) {
-        const newObjects = [
-          ...item.objects,
-          ...action.payload.newObject.objects,
-        ];
-        newSequenceObjects.push({
-          folderId: item.folderId,
-          objects: newObjects,
-        });
-      } else {
-        newSequenceObjects.push(item);
-      }
-    });
+    const folderId = action.payload.folderId
+    console.log(folderId)
     //Get all comments
-    const getCommentUrl = `/comments?objectId=${action.payload.newObject.folderId}&objectType=FOLDER`;
+    const getCommentUrl = `/comments?objectId=${folderId}&objectType=FOLDER`;
     const commentResponse = yield call(instance.get, getCommentUrl);
 
     for (const comment of commentResponse.data) {
@@ -241,10 +228,7 @@ function* setObjectsSaga(action) {
     }
 
     //Create comment with sequence list
-    const sequenceObjectsByFolderId = newSequenceObjects.find(
-      (x) => x.folderId === action.payload.newObject.folderId,
-    );
-    const stringContent = JSON.stringify(sequenceObjectsByFolderId);
+    const stringContent = JSON.stringify(action.payload);
     var startIndex = 0;
     var step = 800;
     var chunkIndex = 0;
@@ -254,7 +238,7 @@ function* setObjectsSaga(action) {
       startIndex += step;
       chunkIndex++;
       const createCommentBody = {
-        objectId: action.payload.newObject.folderId,
+        objectId: folderId,
         objectType: "FOLDER",
         description: chunkIndex + "tuan" + chunk,
       };
@@ -264,7 +248,7 @@ function* setObjectsSaga(action) {
         createCommentBody,
       );
     }
-    yield put(SetObjectsSuccess(newSequenceObjects));
+    yield put(SetObjectsSuccess(action.payload));
   } catch (error) {
     console.error("Error creating folder:", error);
     yield put(SetObjectsFailure(error.message));

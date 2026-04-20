@@ -8,7 +8,7 @@ import {
   DeleteFilled,
   PlusOutlined,
   MinusOutlined,
-  PlayCircleOutlined
+  PlayCircleOutlined,
 } from "@ant-design/icons";
 
 import { DndContext, closestCenter } from "@dnd-kit/core";
@@ -36,8 +36,10 @@ import {
   SetObjectsRequest,
   DeleteSequenceRequest,
 } from "./store/sequence/action";
+import { retry } from "redux-saga/effects";
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
+const math = require("mathjs");
 
 function SortableItem({ id, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
@@ -104,8 +106,6 @@ function App() {
     }
     fetchStatus();
   }, []);
-
-  React.useEffect(() => {}, []);
   return (
     <Layout style={{ height: "100vh" }}>
       <Header style={{ background: "#fff", height: "auto" }}>
@@ -181,23 +181,67 @@ function App() {
                     icon={<PlusOutlined />}
                     onClick={async () => {
                       const tcapi = await WorkspaceAPI.connect(window.parent);
-                      const selection = await tcapi.viewer.getSelection();
-                      const selectedObjects = selection.map((obj) => {
-                        return {
-                          modelId: obj.modelId,
-                          objectIds: obj.objectRuntimeIds,
-                        };
-                      });
-                      const newObject = {
-                        folderId: item.id,
-                        objects: selectedObjects,
+                      const selections = await tcapi.viewer.getSelection();
+                      console.log(selections);
+                      tcapi.viewer.activateTool("pointMarkup");
+
+                      // handler stored so it can be removed later
+                      const onMessage = async (event) => {
+                        if (event.data.event === "viewer.onMarkupChanged") {
+                          console.log(event.data.data.data.markup.start);
+                          const start = event.data.data.data.markup.start;
+                          const refPoint = [
+                            Number(start.positionX),
+                            Number(start.positionY),
+                            Number(start.positionZ),
+                          ];
+                          var sequenceObjects = [];
+                          selections.forEach(async (selection) => {
+                            const objBoxes =
+                              await tcapi.viewer.getObjectBoundingBoxes(
+                                selection.modelId,
+                                selection.objectRuntimeIds,
+                              );
+
+                            objBoxes.forEach((box) => {
+                              const center = math.divide(
+                                math.add(
+                                  [
+                                    1000 * Number(box.boundingBox.min.x),
+                                    1000 * Number(box.boundingBox.min.y),
+                                    1000 * Number(box.boundingBox.min.z),
+                                  ],
+                                  [
+                                    1000 * Number(box.boundingBox.max.x),
+                                    1000 * Number(box.boundingBox.max.y),
+                                    1000 * Number(box.boundingBox.max.z),
+                                  ],
+                                ),
+                                2,
+                              );
+                              const distance = math.distance(refPoint, center);
+                              sequenceObjects.push({
+                                modelId: selection.modelId,
+                                id: box.id,
+                                distance: distance,
+                              });
+                              sequenceObjects.sort((a, b) => {
+                                return Number(a.distance) - Number(b.distance);
+                              });
+                            });
+                          });
+
+                          console.log(sequenceObjects);
+                          const newSequenceObjects = {
+                            folderId: item.id,
+                            objects: sequenceObjects,
+                          };
+                          dispatch(SetObjectsRequest(newSequenceObjects));
+                          window.removeEventListener("message", onMessage);
+                        }
                       };
-                      dispatch(
-                        SetObjectsRequest({
-                          sequenceObjects: sequenceObjects,
-                          newObject: newObject,
-                        }),
-                      );
+
+                      window.addEventListener("message", onMessage);
                     }}
                   />
                   <Popconfirm
@@ -228,7 +272,48 @@ function App() {
               alignItems: "center",
               gap: 8,
             }}
-          ><Button type="text" size="large" icon={<PlayCircleOutlined />} /></div>
+          >
+            <Button
+              type="text"
+              size="large"
+              icon={<PlayCircleOutlined />}
+              onClick={async () => {
+                const tcapi = await WorkspaceAPI.connect(window.parent);
+                const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+                //Hide all objects
+                tcapi.viewer.setObjectState(undefined, {
+                  visible: false,
+                });
+                sequences.forEach(async (sequence) => {
+                  const sequenceObjectsTobeShown = sequenceObjects.filter(
+                    (x) => x.folderId === sequence.id,
+                  );
+                  try {
+                    if (
+                      sequenceObjectsTobeShown[0].objects.objects.length > 0
+                    ) {
+                      console.log(sequenceObjectsTobeShown[0].objects.objects);
+                      sequenceObjectsTobeShown[0].objects.objects.forEach(
+                        async (object) => {
+                          const selector = [
+                            {
+                              modelId: object.modelId,
+                              objectRuntimeIds: [object.id],
+                            },
+                          ];
+                          console.log(selector);
+                          tcapi.viewer.setObjectState(selector, {
+                            visible: true,
+                          });
+                          await delay(1000);
+                        },
+                      );
+                    }
+                  } catch {}
+                });
+              }}
+            />
+          </div>
         </Card>
       </Content>
     </Layout>
