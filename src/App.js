@@ -9,6 +9,7 @@ import {
   PlusOutlined,
   MinusOutlined,
   PlayCircleOutlined,
+  PlayCircleFilled,
 } from "@ant-design/icons";
 
 import { DndContext, closestCenter } from "@dnd-kit/core";
@@ -70,6 +71,7 @@ function App() {
   const [projectId, setProjectId] = useState("");
   const [projectName, setProjectName] = useState("");
   const [step, setStep] = useState("");
+  const [timeStep, setTimeStep] = useState(500);
 
   const onDragEnd = (event) => {
     const { active, over } = event;
@@ -116,6 +118,74 @@ function App() {
       <Content>
         <Card>
           <div style={{ display: "flex", width: "100%", gap: 5 }}>
+            <Input
+              style={{ flex: 1 }}
+              placeholder="Time Step"
+              value={timeStep}
+              onChange={(e) => setTimeStep(Number(e.target.value))}
+            />
+            <Button
+              type="primary"
+              onClick={async () => {
+                const tcapi = await WorkspaceAPI.connect(window.parent);
+                const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+                var accumulatedObjects = [];
+                for (const sequence of sequences) {
+                  const sequenceObjectsTobeShown = sequenceObjects.filter(
+                    (x) => x.folderId === sequence.id,
+                  );
+                  try {
+                    const objects =
+                      sequenceObjectsTobeShown?.[0]?.objects?.objects ?? [];
+                    if (objects.length > 0) {
+                      for (const object of objects) {
+                        const index = accumulatedObjects.findIndex(
+                          (x) => x.modelId === object.modelId,
+                        );
+                        if (index >= 0) {
+                          accumulatedObjects[index].entityIds.push(object.id);
+                        } else {
+                          accumulatedObjects.push({
+                            modelId: object.modelId,
+                            entityIds: [object.id],
+                          });
+                        }
+                        await tcapi.viewer.isolateEntities(accumulatedObjects);
+                        await tcapi.viewer.setObjectState(
+                          {
+                            modelObjectIds: [
+                              {
+                                modelId: object.modelId,
+                                objectRuntimeIds: [object.id],
+                              },
+                            ],
+                          },
+                          {
+                            color: {
+                              r: 252,
+                              g: 0,
+                              b: 0,
+                            },
+                            visible: true,
+                          },
+                        );
+                        await delay(timeStep);
+                      }
+                    }
+                  } catch (error) {
+                    console.error(
+                      "Error processing sequence",
+                      sequence.id,
+                      error,
+                    );
+                  }
+                }
+              }}
+            >
+              Simulation
+            </Button>
+          </div>
+          <div style={{ display: "flex", width: "100%", marginTop: 2, gap: 5 }}>
             <Input
               style={{ flex: 1 }}
               placeholder="Enter Step"
@@ -184,7 +254,6 @@ function App() {
                       const selections = await tcapi.viewer.getSelection();
                       console.log(selections);
                       tcapi.viewer.activateTool("pointMarkup");
-
                       // handler stored so it can be removed later
                       const onMessage = async (event) => {
                         if (event.data.event === "viewer.onMarkupChanged") {
@@ -244,6 +313,68 @@ function App() {
                       window.addEventListener("message", onMessage);
                     }}
                   />
+                  <Button
+                    type="text"
+                    icon={<PlayCircleOutlined />}
+                    onClick={async () => {
+                      const tcapi = await WorkspaceAPI.connect(window.parent);
+                      const delay = (ms) =>
+                        new Promise((res) => setTimeout(res, ms));
+                      var accumulatedObjects = [];
+                      const sequenceObjectsTobeShown = sequenceObjects.filter(
+                        (x) => x.folderId === item.id,
+                      );
+                      try {
+                        const objects =
+                          sequenceObjectsTobeShown?.[0]?.objects?.objects ?? [];
+                        if (objects.length > 0) {
+                          for (const object of objects) {
+                            const index = accumulatedObjects.findIndex(
+                              (x) => x.modelId === object.modelId,
+                            );
+                            if (index >= 0) {
+                              accumulatedObjects[index].entityIds.push(
+                                object.id,
+                              );
+                            } else {
+                              accumulatedObjects.push({
+                                modelId: object.modelId,
+                                entityIds: [object.id],
+                              });
+                            }
+                            await tcapi.viewer.isolateEntities(
+                              accumulatedObjects,
+                            );
+                            await tcapi.viewer.setObjectState(
+                              {
+                                modelObjectIds: [
+                                  {
+                                    modelId: object.modelId,
+                                    objectRuntimeIds: [object.id],
+                                  },
+                                ],
+                              },
+                              {
+                                color: {
+                                  r: 252,
+                                  g: 0,
+                                  b: 0,
+                                },
+                                visible: true,
+                              },
+                            );
+                            await delay(timeStep);
+                          }
+                        }
+                      } catch (error) {
+                        console.error(
+                          "Error processing sequence",
+                          item.id,
+                          error,
+                        );
+                      }
+                    }}
+                  />
                   <Popconfirm
                     title="Delete the step"
                     description="Are you sure to delete this step?"
@@ -265,55 +396,6 @@ function App() {
               </List.Item>
             )}
           />
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <Button
-              type="text"
-              size="large"
-              icon={<PlayCircleOutlined />}
-              onClick={async () => {
-                const tcapi = await WorkspaceAPI.connect(window.parent);
-                const delay = (ms) => new Promise((res) => setTimeout(res, ms));
-                //Hide all objects
-                tcapi.viewer.setObjectState(undefined, {
-                  visible: false,
-                });
-                sequences.forEach(async (sequence) => {
-                  const sequenceObjectsTobeShown = sequenceObjects.filter(
-                    (x) => x.folderId === sequence.id,
-                  );
-                  try {
-                    if (
-                      sequenceObjectsTobeShown[0].objects.objects.length > 0
-                    ) {
-                      console.log(sequenceObjectsTobeShown[0].objects.objects);
-                      sequenceObjectsTobeShown[0].objects.objects.forEach(
-                        async (object) => {
-                          const selector = [
-                            {
-                              modelId: object.modelId,
-                              objectRuntimeIds: [object.id],
-                            },
-                          ];
-                          console.log(selector);
-                          tcapi.viewer.setObjectState(selector, {
-                            visible: true,
-                          });
-                          await delay(1000);
-                        },
-                      );
-                    }
-                  } catch {}
-                });
-              }}
-            />
-          </div>
         </Card>
       </Content>
     </Layout>
