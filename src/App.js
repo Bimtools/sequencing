@@ -28,6 +28,7 @@ import {
   Input,
   Button,
   Popconfirm,
+  Collapse,
 } from "antd";
 import {
   GetSequenceRequest,
@@ -42,20 +43,30 @@ const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 const math = require("mathjs");
 
-function SortableItem({ id, children }) {
+function SortableItem({ item, children }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id });
+    useSortable({ id: item.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    cursor: "grab",
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <List.Item ref={setNodeRef} style={style} {...attributes}>
+      <div
+        style={{
+          display: "flex",
+        }}
+      >
+        <MenuOutlined
+          {...listeners}
+          style={{ cursor: "grab", marginRight: 12 }}
+        />
+        <strong>{item.name}</strong>
+      </div>
       {children}
-    </div>
+    </List.Item>
   );
 }
 
@@ -210,192 +221,188 @@ function App() {
               Create
             </Button>
           </div>
-          <List
-            loading={sequenceState.pending}
-            dataSource={sequences}
-            renderItem={(item, index) => (
-              <List.Item
-                style={{
-                  marginTop: 2,
-                  border: "1px solid #ccc",
-                  borderRadius: 10,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  paddingRight: 12,
-                }}
-                occlick={() => {
-                  console.log("click step", item);
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <MenuOutlined style={{ marginLeft: 10 }} />
-                  <strong>{index + 1}. </strong>
-                  <span>{item.name}</span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <Button
-                    type="text"
-                    icon={<PlusOutlined />}
-                    onClick={async () => {
-                      const tcapi = await WorkspaceAPI.connect(window.parent);
-                      const selections = await tcapi.viewer.getSelection();
-                      console.log(selections);
-                      tcapi.viewer.activateTool("pointMarkup");
-                      // handler stored so it can be removed later
-                      const onMessage = async (event) => {
-                        if (event.data.event === "viewer.onMarkupChanged") {
-                          console.log(event.data.data.data.markup.start);
-                          const start = event.data.data.data.markup.start;
-                          const refPoint = [
-                            Number(start.positionX),
-                            Number(start.positionY),
-                            Number(start.positionZ),
-                          ];
-                          var sequenceObjects = [];
-                          selections.forEach(async (selection) => {
-                            const objBoxes =
-                              await tcapi.viewer.getObjectBoundingBoxes(
-                                selection.modelId,
-                                selection.objectRuntimeIds,
-                              );
 
-                            objBoxes.forEach((box) => {
-                              const center = math.divide(
-                                math.add(
-                                  [
-                                    1000 * Number(box.boundingBox.min.x),
-                                    1000 * Number(box.boundingBox.min.y),
-                                    1000 * Number(box.boundingBox.min.z),
-                                  ],
-                                  [
-                                    1000 * Number(box.boundingBox.max.x),
-                                    1000 * Number(box.boundingBox.max.y),
-                                    1000 * Number(box.boundingBox.max.z),
-                                  ],
-                                ),
-                                2,
-                              );
-                              const distance = math.distance(refPoint, center);
-                              sequenceObjects.push({
-                                modelId: selection.modelId,
-                                id: box.id,
-                                distance: distance,
-                              });
-                              sequenceObjects.sort((a, b) => {
-                                return Number(a.distance) - Number(b.distance);
-                              });
-                            });
-                          });
+          <DndContext onDragEnd={onDragEnd}>
+            <SortableContext
+              items={sequences.map((x) => x.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <List
+                loading={sequenceState.pending}
+                dataSource={sequences}
+                renderItem={(item) => (
+                  <SortableItem key={item.id} item={item}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <Button
+                        type="text"
+                        icon={<PlusOutlined />}
+                        onClick={async () => {
+                          const tcapi = await WorkspaceAPI.connect(
+                            window.parent,
+                          );
+                          const selections = await tcapi.viewer.getSelection();
+                          console.log(selections);
+                          tcapi.viewer.activateTool("pointMarkup");
+                          // handler stored so it can be removed later
+                          const onMessage = async (event) => {
+                            if (event.data.event === "viewer.onMarkupChanged") {
+                              console.log(event.data.data.data.markup.start);
+                              const start = event.data.data.data.markup.start;
+                              const refPoint = [
+                                Number(start.positionX),
+                                Number(start.positionY),
+                                Number(start.positionZ),
+                              ];
+                              var sequenceObjects = [];
+                              selections.forEach(async (selection) => {
+                                const objBoxes =
+                                  await tcapi.viewer.getObjectBoundingBoxes(
+                                    selection.modelId,
+                                    selection.objectRuntimeIds,
+                                  );
 
-                          console.log(sequenceObjects);
-                          const newSequenceObjects = {
-                            folderId: item.id,
-                            objects: sequenceObjects,
-                          };
-                          dispatch(SetObjectsRequest(newSequenceObjects));
-                          window.removeEventListener("message", onMessage);
-                        }
-                      };
-
-                      window.addEventListener("message", onMessage);
-                    }}
-                  />
-                  <Button
-                    type="text"
-                    icon={<PlayCircleOutlined />}
-                    onClick={async () => {
-                      const tcapi = await WorkspaceAPI.connect(window.parent);
-                      const delay = (ms) =>
-                        new Promise((res) => setTimeout(res, ms));
-                      var accumulatedObjects = [];
-                      const sequenceObjectsTobeShown = sequenceObjects.filter(
-                        (x) => x.folderId === item.id,
-                      );
-                      try {
-                        const objects =
-                          sequenceObjectsTobeShown?.[0]?.objects?.objects ?? [];
-                        if (objects.length > 0) {
-                          for (const object of objects) {
-                            const index = accumulatedObjects.findIndex(
-                              (x) => x.modelId === object.modelId,
-                            );
-                            if (index >= 0) {
-                              accumulatedObjects[index].entityIds.push(
-                                object.id,
-                              );
-                            } else {
-                              accumulatedObjects.push({
-                                modelId: object.modelId,
-                                entityIds: [object.id],
+                                objBoxes.forEach((box) => {
+                                  const center = math.divide(
+                                    math.add(
+                                      [
+                                        1000 * Number(box.boundingBox.min.x),
+                                        1000 * Number(box.boundingBox.min.y),
+                                        1000 * Number(box.boundingBox.min.z),
+                                      ],
+                                      [
+                                        1000 * Number(box.boundingBox.max.x),
+                                        1000 * Number(box.boundingBox.max.y),
+                                        1000 * Number(box.boundingBox.max.z),
+                                      ],
+                                    ),
+                                    2,
+                                  );
+                                  const distance = math.distance(
+                                    refPoint,
+                                    center,
+                                  );
+                                  sequenceObjects.push({
+                                    modelId: selection.modelId,
+                                    id: box.id,
+                                    distance: distance,
+                                  });
+                                  sequenceObjects.sort((a, b) => {
+                                    return (
+                                      Number(a.distance) - Number(b.distance)
+                                    );
+                                  });
+                                });
                               });
+
+                              console.log(sequenceObjects);
+                              const newSequenceObjects = {
+                                folderId: item.id,
+                                objects: sequenceObjects,
+                              };
+                              console.log(newSequenceObjects);
+                              dispatch(SetObjectsRequest(newSequenceObjects));
+                              window.removeEventListener("message", onMessage);
                             }
-                            await tcapi.viewer.isolateEntities(
-                              accumulatedObjects,
+                          };
+
+                          window.addEventListener("message", onMessage);
+                        }}
+                      />
+                      <Button
+                        type="text"
+                        icon={<PlayCircleOutlined />}
+                        onClick={async () => {
+                          const tcapi = await WorkspaceAPI.connect(
+                            window.parent,
+                          );
+                          const delay = (ms) =>
+                            new Promise((res) => setTimeout(res, ms));
+                          var accumulatedObjects = [];
+                          const sequenceObjectsTobeShown =
+                            sequenceObjects.filter(
+                              (x) => x.folderId === item.id,
                             );
-                            await tcapi.viewer.setObjectState(
-                              {
-                                modelObjectIds: [
-                                  {
+                          try {
+                            const objects =
+                              sequenceObjectsTobeShown?.[0]?.objects?.objects ??
+                              [];
+                            if (objects.length > 0) {
+                              for (const object of objects) {
+                                const index = accumulatedObjects.findIndex(
+                                  (x) => x.modelId === object.modelId,
+                                );
+                                if (index >= 0) {
+                                  accumulatedObjects[index].entityIds.push(
+                                    object.id,
+                                  );
+                                } else {
+                                  accumulatedObjects.push({
                                     modelId: object.modelId,
-                                    objectRuntimeIds: [object.id],
+                                    entityIds: [object.id],
+                                  });
+                                }
+                                await tcapi.viewer.isolateEntities(
+                                  accumulatedObjects,
+                                );
+                                await tcapi.viewer.setObjectState(
+                                  {
+                                    modelObjectIds: [
+                                      {
+                                        modelId: object.modelId,
+                                        objectRuntimeIds: [object.id],
+                                      },
+                                    ],
                                   },
-                                ],
-                              },
-                              {
-                                color: {
-                                  r: 252,
-                                  g: 0,
-                                  b: 0,
-                                },
-                                visible: true,
-                              },
+                                  {
+                                    color: {
+                                      r: 252,
+                                      g: 0,
+                                      b: 0,
+                                    },
+                                    visible: true,
+                                  },
+                                );
+                                await delay(timeStep);
+                              }
+                            }
+                          } catch (error) {
+                            console.error(
+                              "Error processing sequence",
+                              item.id,
+                              error,
                             );
-                            await delay(timeStep);
                           }
-                        }
-                      } catch (error) {
-                        console.error(
-                          "Error processing sequence",
-                          item.id,
-                          error,
-                        );
-                      }
-                    }}
-                  />
-                  <Popconfirm
-                    title="Delete the step"
-                    description="Are you sure to delete this step?"
-                    onConfirm={() => {
-                      const deleteSequenceBody = {
-                        rootCommentId: rootCommentId,
-                        sequences: sequences,
-                        folderId: item.id,
-                      };
-                      console.log("deleteSequenceBody", deleteSequenceBody);
-                      dispatch(DeleteSequenceRequest(deleteSequenceBody));
-                    }}
-                    okText="Yes"
-                    cancelText="No"
-                  >
-                    <Button danger type="text" icon={<DeleteFilled />} />
-                  </Popconfirm>
-                </div>
-              </List.Item>
-            )}
-          />
+                        }}
+                      />
+                      <Popconfirm
+                        title="Delete the step"
+                        description="Are you sure to delete this step?"
+                        onConfirm={() => {
+                          const deleteSequenceBody = {
+                            rootCommentId: rootCommentId,
+                            sequences: sequences,
+                            folderId: item.id,
+                          };
+                          console.log("deleteSequenceBody", deleteSequenceBody);
+                          dispatch(DeleteSequenceRequest(deleteSequenceBody));
+                        }}
+                        okText="Yes"
+                        cancelText="No"
+                      >
+                        <Button danger type="text" icon={<DeleteFilled />} />
+                      </Popconfirm>
+                    </div>
+                  </SortableItem>
+                )}
+              />
+            </SortableContext>
+          </DndContext>
         </Card>
       </Content>
     </Layout>

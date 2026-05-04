@@ -89,10 +89,11 @@ const reducers = (state = initialState, action) => {
         pending: true,
       };
     case type.SET_OBJECTS_SUCCESS:
+        const remaining = state.sequenceObjects.map((x)=>x.folderId != action.payload.folderId)
       return {
           ...state,
           pending: false,
-          sequenceObjects: action.payload,
+          sequenceObjects: [...remaining,action.payload],
         };
 
     case type.SET_OBJECTS_FAILURE:
