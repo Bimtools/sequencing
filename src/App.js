@@ -43,30 +43,87 @@ const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 const math = require("mathjs");
 
-function SortableItem({ item, children }) {
+function SortableItem({ item, children, sequenceObjects }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: item.id });
-
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  const objects = sequenceObjects.filter(x=>x.folderId === item.id)
+  // console.log(sequenceObjects)
+  return (
+    <div>
+      <List.Item ref={setNodeRef} style={style} {...attributes}>
+        <div
+          style={{
+            display: "flex",
+          }}
+        >
+          <MenuOutlined
+            {...listeners}
+            style={{ cursor: "grab", marginRight: 12 }}
+          />
+          <strong>{item.name}</strong>
+        </div>
+        {children}
+      </List.Item>
+      <DndContext onDragEnd={()=>{}}>
+            <SortableContext
+              items={objects.map((x) =>`${x.modelId}${x.id}`)}
+              strategy={verticalListSortingStrategy}
+            >
+              <List
+                dataSource={objects}
+                renderItem={(item) => (
+                  <SortableSubItem
+                    key={item.id}
+                    item={item}
+                  >
+                  </SortableSubItem>
+                )}
+              />
+            </SortableContext>
+          </DndContext>
+    </div>
+  );
+}
+function SortableSubItem({ item, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: item.id });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
+  const onDragEnd = (event) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const newArray = (prev) => {
+        const oldIndex = prev.findIndex((x) => x.id === active.id);
+        const newIndex = prev.findIndex((x) => x.id === over.id);
+        return arrayMove(prev, oldIndex, newIndex);
+      };
+    }
+  };
+  // console.log(item)
   return (
-    <List.Item ref={setNodeRef} style={style} {...attributes}>
-      <div
-        style={{
-          display: "flex",
-        }}
-      >
-        <MenuOutlined
-          {...listeners}
-          style={{ cursor: "grab", marginRight: 12 }}
-        />
-        <strong>{item.name}</strong>
-      </div>
-      {children}
-    </List.Item>
+    <div>
+      <List.Item ref={setNodeRef} style={style} {...attributes}>
+        <div
+          style={{
+            display: "flex",
+          }}
+        >
+          <MenuOutlined
+            {...listeners}
+            style={{ cursor: "grab", marginRight: 12 }}
+          />
+          <strong>{item.id}</strong>
+        </div>
+        {children}
+      </List.Item>
+    </div>
   );
 }
 
@@ -128,7 +185,7 @@ function App() {
       </Header>
       <Content>
         <Card>
-          <div style={{ display: "flex", width: "100%", gap: 5 }}>
+          <div style={{ display: "flex", maxWidth: "350px", gap: 5 }}>
             <Input
               style={{ flex: 1 }}
               placeholder="Time Step"
@@ -137,6 +194,7 @@ function App() {
             />
             <Button
               type="primary"
+              style={{ width: 100 }}
               onClick={async () => {
                 const tcapi = await WorkspaceAPI.connect(window.parent);
                 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -196,15 +254,18 @@ function App() {
               Simulation
             </Button>
           </div>
-          <div style={{ display: "flex", width: "100%", marginTop: 2, gap: 5 }}>
+          <div
+            style={{ display: "flex", maxWidth: "350px", marginTop: 2, gap: 5 }}
+          >
             <Input
               style={{ flex: 1 }}
-              placeholder="Enter Step"
+              placeholder="Group Name"
               value={step}
               onChange={(e) => setStep(e.target.value)}
             />
             <Button
               type="primary"
+              style={{ width: 100 }}
               onClick={() => {
                 dispatch(
                   CreateSequenceRequest({
@@ -231,7 +292,11 @@ function App() {
                 loading={sequenceState.pending}
                 dataSource={sequences}
                 renderItem={(item) => (
-                  <SortableItem key={item.id} item={item}>
+                  <SortableItem
+                    key={item.id}
+                    item={item}
+                    sequenceObjects={sequenceObjects}
+                  >
                     <div
                       style={{
                         display: "flex",
@@ -300,7 +365,6 @@ function App() {
                                 });
                               });
 
-                              console.log(sequenceObjects);
                               const newSequenceObjects = {
                                 folderId: item.id,
                                 objects: sequenceObjects,
