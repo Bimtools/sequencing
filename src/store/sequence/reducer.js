@@ -4,6 +4,8 @@ const initialState = {
   rootCommentId: null,
   sequences: [],
   sequenceObjects: [],
+  selectedObjects: [],
+  selectedGroup: null,
   pending: false,
   error: null,
 };
@@ -89,14 +91,37 @@ const reducers = (state = initialState, action) => {
         pending: true,
       };
     case type.SET_OBJECTS_SUCCESS:
-        const remaining = state.sequenceObjects.map((x)=>x.folderId != action.payload.folderId)
+      const remaining = state.sequenceObjects.filter(
+        (x) => x.folderId !== action.payload.folderId,
+      );
       return {
-          ...state,
-          pending: false,
-          sequenceObjects: [...remaining,action.payload],
-        };
+        ...state,
+        pending: false,
+        sequenceObjects: [...remaining, action.payload],
+      };
 
     case type.SET_OBJECTS_FAILURE:
+      return {
+        ...state,
+        pending: false,
+        error: action.error,
+      };
+    case type.SELECT_OBJECTS_REQUEST:
+      return {
+        ...state,
+        pending: true,
+      };
+    case type.SELECT_OBJECTS_SUCCESS:
+      const objects = action.payload?.objects ?? [];
+      const selectedGroup = action.payload?.folderId ?? null;
+      return {
+        ...state,
+        selectedObjects: objects,
+        selectedGroup: selectedGroup,
+        pending: false,
+      };
+
+    case type.SELECT_OBJECTS_FAILURE:
       return {
         ...state,
         pending: false,

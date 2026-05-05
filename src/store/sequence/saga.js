@@ -27,7 +27,7 @@ function* getSequenceSaga(action) {
     const getFolderUrl = `/folders/by_path?path=${action.payload.projectName}&projectId=${action.payload.projectId}`;
     const response = yield call(instance.get, getFolderUrl);
     const folders = response.data.filter((x) => x.name === "Sequence");
-    if (folders.length == 0) {
+    if (folders.length === 0) {
       const insertFolderUrl = `/folders`;
       const insertFolderResponse = yield call(instance.post, insertFolderUrl, {
         name: "Sequence",
@@ -65,8 +65,7 @@ function* getSequenceSaga(action) {
         contents.sort((a, b) => parseInt(a.id) - parseInt(b.id));
         const content = contents.map((x) => x.content).join("");
         const objects = JSON.parse(content.length > 0 ? content : "[]");
-        console.log("objects", objects);
-        sequenceObjects.push({ folderId: sequence.id, objects: objects });
+        sequenceObjects.push(objects);
       }
       console.log("sequenceObjects", sequenceObjects);
       yield put(

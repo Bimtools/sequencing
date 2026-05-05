@@ -151,3 +151,22 @@ export function SetObjectsFailure(payload){
         payload:payload
     }
 }
+
+export function SelectObjectsRequest(payload){
+    return{
+        type:actionType.SELECT_OBJECTS_REQUEST,
+        payload:payload
+    }
+}
+export function SelectObjectsSuccess(payload){
+    return{
+        type:actionType.SELECT_OBJECTS_SUCCESS,
+        payload:payload
+    }
+}
+export function SelectObjectsFailure(payload){
+    return{
+        type:actionType.SELECT_OBJECTS_FAILURE,
+        payload:payload
+    }
+}
