@@ -41,8 +41,12 @@ const reducers = (state = initialState, action) => {
         pending: false,
         rootCommentId: action.payload.commentId,
         rootFolderId: action.payload.folderId,
-        sequences: [...action.payload.sequences],
-        sequenceObjects: [...action.payload.sequenceObjects],
+        sequences: Array.isArray(action.payload.sequences)
+          ? action.payload.sequences
+          : [],
+        sequenceObjects: Array.isArray(action.payload.sequenceObjects)
+          ? action.payload.sequenceObjects
+          : [],
       };
     case type.GET_SEQUENCE_FAILURE:
       return {

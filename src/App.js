@@ -1,6 +1,7 @@
 import logo from "./logo.svg";
 import "./App.css";
 import * as WorkspaceAPI from "trimble-connect-workspace-api";
+import * as XLSX from "xlsx";
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -12,6 +13,8 @@ import {
   PlayCircleFilled,
   FileOutlined,
   CloseOutlined,
+  DownOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 
 import { DndContext, closestCenter } from "@dnd-kit/core";
@@ -61,8 +64,16 @@ function App() {
   const [projectId, setProjectId] = useState("");
   const [projectName, setProjectName] = useState("");
   const [step, setStep] = useState("");
-  const [timeStep, setTimeStep] = useState(500);
+  const [timeStep, setTimeStep] = useState(100);
 
+  function exportToExcel(data, fileName = "Sequencing.xlsx") {
+    const worksheet = XLSX.utils.json_to_sheet(data);
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+
+    XLSX.writeFile(workbook, fileName);
+  }
   const onDragEnd = (event) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -80,6 +91,23 @@ function App() {
       );
     }
   };
+  const onDragEndSubItem = (event) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const newArray = (prev) => {
+        const oldIndex = prev.findIndex((x) => x.id === active.id);
+        const newIndex = prev.findIndex((x) => x.id === over.id);
+        return arrayMove(prev, oldIndex, newIndex);
+      };
+      const newObjects = newArray(selectedObjects);
+      const newSequenceObjects = {
+        folderId: selectedGroup,
+        objects: newObjects,
+      };
+      dispatch(SetObjectsRequest(newSequenceObjects));
+      dispatch(SelectObjectsSuccess(newSequenceObjects));
+    }
+  };
   function SortableItem({ item, icon, children, sequenceObjects }) {
     const { attributes, listeners, setNodeRef, transform, transition } =
       useSortable({ id: item.id });
@@ -95,9 +123,8 @@ function App() {
         {...attributes}
         onClick={() => {
           const selectedObjects = sequenceObjects.filter(
-            (x) => x.folderId === item.id,
+            (x) => x && x.folderId === item.id,
           );
-          console.log(sequenceObjects);
           dispatch(SelectObjectsSuccess(selectedObjects[0]));
         }}
       >
@@ -127,8 +154,19 @@ function App() {
         ref={setNodeRef}
         style={style}
         {...attributes}
-        onClick={() => {
-          console.log("a");
+        onClick={async () => {
+          const tcapi = await WorkspaceAPI.connect(window.parent);
+          await tcapi.viewer.setSelection(
+            {
+              modelObjectIds: [
+                {
+                  modelId: item.modelId,
+                  objectRuntimeIds: [item.id],
+                },
+              ],
+            },
+            "set",
+          );
         }}
       >
         <div style={{ display: "flex", alignItems: "center" }}>
@@ -137,7 +175,7 @@ function App() {
               {icon}
             </span>
           )}
-          <strong>{item.asmPos}</strong>
+          <strong>{item.asmPos === "" ? item.id : item.asmPos}</strong>
         </div>
         {children}
       </List.Item>
@@ -190,7 +228,7 @@ function App() {
                   );
                   try {
                     const objects =
-                      sequenceObjectsTobeShown?.[0]?.objects?.objects ?? [];
+                      sequenceObjectsTobeShown?.[0]?.objects ?? [];
                     if (objects.length > 0) {
                       for (const object of objects) {
                         const index = accumulatedObjects.findIndex(
@@ -238,6 +276,31 @@ function App() {
             >
               Simulation
             </Button>
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              onClick={() => {
+                const data = [];
+                for (const key in sequenceObjects) {
+                  const item = sequenceObjects[key];
+                  if (!item) continue;
+
+                  const sequence = sequences.filter(
+                    (x) => x.id === item.folderId,
+                  );
+                  console.log(item);
+                  for (const obj of item.objects) {
+                    data.push({
+                      group: sequence[0]?.name ?? "",
+                      modelId: obj.modelId,
+                      id: obj.id,
+                      asmPos: obj.asmPos,
+                    });
+                  }
+                }
+                exportToExcel(data, "Sequencing.xlsx");
+              }}
+            />
           </div>
           <div
             style={{
@@ -255,7 +318,7 @@ function App() {
             />
             <Button
               type="primary"
-              style={{ width: 100 }}
+              style={{ width: 137 }}
               onClick={() => {
                 dispatch(
                   CreateSequenceRequest({
@@ -427,8 +490,9 @@ function App() {
                                   });
                                   const existingObjects =
                                     sequenceObjects.filter(
-                                      (x) => x.folderId === item.id,
+                                      (x) => x && x.folderId === item.id,
                                     )[0]?.objects ?? [];
+
                                   var newObjects = [...existingObjects];
                                   newObjects.push(...newAddedSequenceObjects);
                                   const newSequenceObjects = {
@@ -544,17 +608,18 @@ function App() {
               </DndContext>
             </Splitter.Panel>
             <Splitter.Panel>
-              <DndContext onDragEnd={onDragEnd}>
+              <DndContext onDragEnd={onDragEndSubItem}>
                 <SortableContext
-                  items={selectedObjects.map((x) => `${x.modelId}${x.id}`)}
+                  items={selectedObjects.map((x) => x.id)}
                   strategy={verticalListSortingStrategy}
                 >
                   <List
                     style={{
                       marginLeft: "10px",
-                      minWidth: "200px",
+                      minWidth: "100px",
                       height: "600px",
                     }}
+                    loading={sequenceState.pending}
                     dataSource={selectedObjects}
                     renderItem={(item) => (
                       <SortableSubItem
@@ -573,8 +638,6 @@ function App() {
                             type="text"
                             icon={<CloseOutlined />}
                             onClick={() => {
-                              console.log(item);
-
                               const filteredObjects = selectedObjects.filter(
                                 (obj) =>
                                   !(
@@ -587,7 +650,9 @@ function App() {
                                 objects: filteredObjects,
                               };
                               dispatch(SetObjectsRequest(newSequenceObjects));
-                              dispatch(SelectObjectsSuccess(newSequenceObjects))
+                              dispatch(
+                                SelectObjectsSuccess(newSequenceObjects),
+                              );
                             }}
                           />
                         </div>

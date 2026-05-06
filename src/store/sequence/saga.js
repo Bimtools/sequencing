@@ -64,7 +64,7 @@ function* getSequenceSaga(action) {
         });
         contents.sort((a, b) => parseInt(a.id) - parseInt(b.id));
         const content = contents.map((x) => x.content).join("");
-        const objects = JSON.parse(content.length > 0 ? content : "[]");
+        const objects = JSON.parse(content.length > 0 ? content : null);
         sequenceObjects.push(objects);
       }
       console.log("sequenceObjects", sequenceObjects);
@@ -214,8 +214,8 @@ function* deleteSequenceSaga(action) {
 function* setObjectsSaga(action) {
   try {
     console.log("Set objects saga", action.payload);
-    const folderId = action.payload.folderId
-    console.log(folderId)
+    const folderId = action.payload.folderId;
+    console.log(folderId);
     //Get all comments
     const getCommentUrl = `/comments?objectId=${folderId}&objectType=FOLDER`;
     const commentResponse = yield call(instance.get, getCommentUrl);
