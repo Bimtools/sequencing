@@ -575,7 +575,7 @@ function App() {
                                           return false;
                                         } else if (
                                           property.name.trim() ===
-                                          "Tekla Assembly"
+                                          "Tekla Assembly" || property.name.trim() === "Property Set"
                                         ) {
                                           const asm_properties =
                                             property.properties;
@@ -588,13 +588,15 @@ function App() {
                                                 return false;
                                               if (
                                                 asm_property.name.trim() ===
-                                                "Assembly/Cast unit Mark"
+                                                "Assembly/Cast unit Mark" || asm_property.name.trim() ===
+                                                "ASSEMBLY_POS"
                                               ) {
                                                 asm_pos = asm_property.value;
                                               }
                                               if (
                                                 asm_property.name.trim() ===
-                                                "Assembly/Cast unit position code"
+                                                "Assembly/Cast unit position code" || asm_property.name.trim() ===
+                                                "ASSEMBLY_POSITION_CODE"
                                               ) {
                                                 positionCode =
                                                   asm_property.value;
