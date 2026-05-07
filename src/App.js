@@ -147,7 +147,7 @@ function App() {
               objectRuntimeIds: [x.id],
             };
           });
-          console.log(runtimeIds)
+          console.log(runtimeIds);
           setStep(item.name);
           setColor({ rgb: item.color });
           // const tcapi = await WorkspaceAPI.connect(window.parent);
@@ -265,6 +265,9 @@ function App() {
                   const sequenceObjectsTobeShown = sequenceObjects.filter(
                     (x) => x.folderId === sequence.id,
                   );
+                  const selectedSequence = sequences.filter(
+                    (x) => x.id == sequence.id,
+                  );
                   try {
                     const objects =
                       sequenceObjectsTobeShown?.[0]?.objects ?? [];
@@ -293,9 +296,9 @@ function App() {
                           },
                           {
                             color: {
-                              r: 252,
-                              g: 0,
-                              b: 0,
+                              r: selectedSequence[0].color.r,
+                              g: selectedSequence[0].color.g,
+                              b: selectedSequence[0].color.b,
                             },
                             visible: true,
                           },
@@ -636,8 +639,12 @@ function App() {
                               var accumulatedObjects = [];
                               const sequenceObjectsTobeShown =
                                 sequenceObjects.filter(
-                                  (x) => x.folderId === item.id,
+                                  (x) => x && x.folderId === item.id,
                                 );
+                              const selectedSequence = sequences.filter(
+                                (x) => x.id == item.id,
+                              );
+                              console.log(selectedSequence);
                               try {
                                 const objects =
                                   sequenceObjectsTobeShown?.[0]?.objects ?? [];
@@ -670,9 +677,9 @@ function App() {
                                       },
                                       {
                                         color: {
-                                          r: 252,
-                                          g: 0,
-                                          b: 0,
+                                          r: selectedSequence[0].color.r,
+                                          g: selectedSequence[0].color.g,
+                                          b: selectedSequence[0].color.b,
                                         },
                                         visible: true,
                                       },
