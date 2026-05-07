@@ -547,7 +547,9 @@ function App() {
                                       const properties = items[i].properties;
                                       let asm_pos = "";
                                       let positionCode = "";
+                                      console.log(properties);
                                       properties.every((property) => {
+                                        console.log(property.name);
                                         if (property.name === "ASSEMBLY") {
                                           const asm_properties =
                                             property.properties;
@@ -575,7 +577,9 @@ function App() {
                                           return false;
                                         } else if (
                                           property.name.trim() ===
-                                          "Tekla Assembly" || property.name.trim() === "Property Set"
+                                            "Tekla Assembly" ||
+                                          property.name.trim() ===
+                                            "PropertySet"
                                         ) {
                                           const asm_properties =
                                             property.properties;
@@ -588,15 +592,17 @@ function App() {
                                                 return false;
                                               if (
                                                 asm_property.name.trim() ===
-                                                "Assembly/Cast unit Mark" || asm_property.name.trim() ===
-                                                "ASSEMBLY_POS"
+                                                  "Assembly/Cast unit Mark" ||
+                                                asm_property.name.trim() ===
+                                                  "ASSEMBLY_POS"
                                               ) {
                                                 asm_pos = asm_property.value;
                                               }
                                               if (
                                                 asm_property.name.trim() ===
-                                                "Assembly/Cast unit position code" || asm_property.name.trim() ===
-                                                "ASSEMBLY_POSITION_CODE"
+                                                  "Assembly/Cast unit position code" ||
+                                                asm_property.name.trim() ===
+                                                  "ASSEMBLY_POSITION_CODE"
                                               ) {
                                                 positionCode =
                                                   asm_property.value;
@@ -741,7 +747,9 @@ function App() {
                               const tcapi = await WorkspaceAPI.connect(
                                 window.parent,
                               );
-                              const items = sequenceObjects.filter(x=> x && x.folderId === item.id)
+                              const items = sequenceObjects.filter(
+                                (x) => x && x.folderId === item.id,
+                              );
                               const runtimeIds = items[0].objects.map((x) => {
                                 return {
                                   modelId: x.modelId,
