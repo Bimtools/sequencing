@@ -155,6 +155,7 @@ function* createSequenceSaga(action) {
     yield put(CreateSequenceFailure(error.message));
   }
 }
+
 function* updateCommentSaga(action) {
   try {
     //Update comment with new sequence list

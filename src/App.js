@@ -34,7 +34,11 @@ import {
   Button,
   Popconfirm,
   Splitter,
+  Form,
+  Modal,
 } from "antd";
+import { Colorpicker, ColorPickerValue } from "antd-colorpicker";
+
 import {
   GetSequenceRequest,
   CreateSequenceRequest,
@@ -65,6 +69,14 @@ function App() {
   const [projectName, setProjectName] = useState("");
   const [step, setStep] = useState("");
   const [timeStep, setTimeStep] = useState(100);
+  const [colorDialog, setColorDialog] = useState(false);
+  const [color, setColor] = useState({
+    rgb: {
+      r: 248,
+      b: 234,
+      g: 28,
+    },
+  });
 
   function exportToExcel(data, fileName = "Sequencing.xlsx") {
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -114,18 +126,45 @@ function App() {
     const style = {
       transform: CSS.Transform.toString(transform),
       transition,
+      background: `rgb(${item.color.r}, ${item.color.g}, ${item.color.b},0.8)`,
     };
-
+    console.log(item);
     return (
       <List.Item
         ref={setNodeRef}
         style={style}
         {...attributes}
-        onClick={() => {
+        onClick={async () => {
           const selectedObjects = sequenceObjects.filter(
             (x) => x && x.folderId === item.id,
           );
-          dispatch(SelectObjectsSuccess(selectedObjects[0]));
+          console.log(selectedObjects);
+          const items =
+            selectedObjects.length > 0 ? selectedObjects[0].objects : [];
+          const runtimeIds = items.map((x) => {
+            return {
+              modelId: x.modelId,
+              objectRuntimeIds: [x.id],
+            };
+          });
+          console.log(runtimeIds)
+          setStep(item.name);
+          setColor({ rgb: item.color });
+          const tcapi = await WorkspaceAPI.connect(window.parent);
+          await tcapi.viewer.setSelection(
+            {
+              modelObjectIds: runtimeIds,
+            },
+            "set",
+          );
+          dispatch(
+            SelectObjectsSuccess(
+              selectedObjects[0] ?? {
+                folderId: item.id,
+                objects: [],
+              },
+            ),
+          );
         }}
       >
         <div style={{ display: "flex", alignItems: "center" }}>
@@ -281,6 +320,7 @@ function App() {
               icon={<DownloadOutlined />}
               onClick={() => {
                 const data = [];
+                var index = 0;
                 for (const key in sequenceObjects) {
                   const item = sequenceObjects[key];
                   if (!item) continue;
@@ -290,11 +330,12 @@ function App() {
                   );
                   console.log(item);
                   for (const obj of item.objects) {
+                    index = index + 1;
                     data.push({
                       group: sequence[0]?.name ?? "",
-                      modelId: obj.modelId,
-                      id: obj.id,
                       asmPos: obj.asmPos,
+                      location: obj.positionCode,
+                      sequenceNo: index,
                     });
                   }
                 }
@@ -316,14 +357,48 @@ function App() {
               value={step}
               onChange={(e) => setStep(e.target.value)}
             />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                flexDirection: "row",
+                columnGap: "2px",
+              }}
+            >
+              <div
+                type="primary"
+                onClick={() => setColorDialog(!colorDialog)}
+                style={{
+                  background: `rgb(${color.rgb.r ?? 0},${color.rgb.g ?? 0},${color.rgb.b ?? 0})`,
+                }}
+              >
+                          
+              </div>
+              <Modal
+                width={270}
+                title="Color"
+                open={colorDialog}
+                footer={null}
+                onCancel={() => {
+                  setColorDialog(!colorDialog);
+                }}
+              >
+                <Colorpicker
+                  value={color}
+                  onChange={(value) => {
+                    setColor(value);
+                  }}
+                />
+              </Modal>
+            </div>
             <Button
               type="primary"
-              style={{ width: 137 }}
+              style={{ width: 66 }}
               onClick={() => {
                 dispatch(
                   CreateSequenceRequest({
                     name: step,
-                    color: "#fff",
+                    color: color.rgb,
                     rootFolderId: rootFolderId,
                     rootCommentId: rootCommentId,
                     sequences: sequences,
@@ -333,6 +408,28 @@ function App() {
               }}
             >
               Create
+            </Button>
+            <Button
+              type="primary"
+              style={{ width: 65 }}
+              onClick={() => {
+                console.log(step);
+                console.log(selectedGroup);
+                const newSequences = sequences.map((x) =>
+                  x.id !== selectedGroup
+                    ? x
+                    : { ...x, name: step, color: color.rgb },
+                );
+                console.log(newSequences);
+                dispatch(
+                  UpdateCommentRequest({
+                    commentId: rootCommentId,
+                    sequences: newSequences,
+                  }),
+                );
+              }}
+            >
+              Modify
             </Button>
           </div>
           <Splitter
@@ -426,13 +523,18 @@ function App() {
                                       );
                                       const properties = items[i].properties;
                                       let asm_pos = "";
+                                      let positionCode = "";
                                       properties.every((property) => {
                                         if (property.name === "ASSEMBLY") {
                                           const asm_properties =
                                             property.properties;
                                           asm_properties.every(
                                             (asm_property) => {
-                                              if (asm_pos !== "") return false;
+                                              if (
+                                                asm_pos !== "" &&
+                                                positionCode !== ""
+                                              )
+                                                return false;
                                               if (
                                                 asm_property.name.trim() ===
                                                 "ASSEMBLY_POS"
@@ -443,6 +545,7 @@ function App() {
                                                     "",
                                                   );
                                               }
+
                                               return true;
                                             },
                                           );
@@ -455,12 +558,23 @@ function App() {
                                             property.properties;
                                           asm_properties.every(
                                             (asm_property) => {
-                                              if (asm_pos !== "") return false;
+                                              if (
+                                                asm_pos !== "" &&
+                                                positionCode !== ""
+                                              )
+                                                return false;
                                               if (
                                                 asm_property.name.trim() ===
                                                 "Assembly/Cast unit Mark"
                                               ) {
                                                 asm_pos = asm_property.value;
+                                              }
+                                              if (
+                                                asm_property.name.trim() ===
+                                                "Assembly/Cast unit position code"
+                                              ) {
+                                                positionCode =
+                                                  asm_property.value;
                                               }
                                               return true;
                                             },
@@ -480,6 +594,7 @@ function App() {
                                         id: box.id,
                                         distance: math.round(distance),
                                         asmPos: asm_pos,
+                                        positionCode: positionCode,
                                       });
                                     }
                                   }
@@ -594,11 +709,7 @@ function App() {
                             okText="Yes"
                             cancelText="No"
                           >
-                            <Button
-                              danger
-                              type="text"
-                              icon={<DeleteFilled />}
-                            />
+                            <Button type="text" icon={<DeleteFilled />} />
                           </Popconfirm>
                         </div>
                       </SortableItem>

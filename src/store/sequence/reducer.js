@@ -30,6 +30,23 @@ const reducers = (state = initialState, action) => {
         pending: false,
         error: action.payload,
       };
+    case type.UPDATE_SEQUENCE_REQUEST:
+      return {
+        ...state,
+        pending: true,
+      };
+    case type.UPDATE_SEQUENCE_SUCCESS:
+      return {
+        ...state,
+        pending: false,
+        sequences: [...action.payload.sequences],
+      };
+    case type.UPDATE_SEQUENCE_FAILURE:
+      return {
+        ...state,
+        pending: false,
+        error: action.payload,
+      };
     case type.GET_SEQUENCE_REQUEST:
       return {
         ...state,
@@ -96,7 +113,7 @@ const reducers = (state = initialState, action) => {
       };
     case type.SET_OBJECTS_SUCCESS:
       const remaining = state.sequenceObjects.filter(
-        (x) => x.folderId !== action.payload.folderId,
+        (x) => x && x.folderId !== action.payload.folderId,
       );
       return {
         ...state,

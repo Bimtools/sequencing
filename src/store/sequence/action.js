@@ -19,6 +19,25 @@ export function CreateSequenceFailure(payload){
     }
 }
 
+export function UpdateSequenceRequest(payload){
+    return{
+        type:actionType.UPDATE_SEQUENCE_REQUEST,
+        payload:payload
+    }
+}
+export function UpdateSequenceSuccess(payload){
+    return{
+        type:actionType.UPDATE_SEQUENCE_SUCCESS,
+        payload:payload
+    }
+}
+export function UpdateSequenceFailure(payload){
+    return{
+        type:actionType.UPDATE_SEQUENCE_FAILURE,
+        payload:payload
+    }
+}
+
 export function GetSequenceRequest(payload){
     return{
         type:actionType.GET_SEQUENCE_REQUEST,
