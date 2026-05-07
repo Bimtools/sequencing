@@ -134,7 +134,7 @@ function App() {
         ref={setNodeRef}
         style={style}
         {...attributes}
-        onClick={async () => {
+        onClick={() => {
           const selectedObjects = sequenceObjects.filter(
             (x) => x && x.folderId === item.id,
           );
@@ -150,13 +150,13 @@ function App() {
           console.log(runtimeIds)
           setStep(item.name);
           setColor({ rgb: item.color });
-          const tcapi = await WorkspaceAPI.connect(window.parent);
-          await tcapi.viewer.setSelection(
-            {
-              modelObjectIds: runtimeIds,
-            },
-            "set",
-          );
+          // const tcapi = await WorkspaceAPI.connect(window.parent);
+          // await tcapi.viewer.setSelection(
+          //   {
+          //     modelObjectIds: runtimeIds,
+          //   },
+          //   "set",
+          // );
           dispatch(
             SelectObjectsSuccess(
               selectedObjects[0] ?? {
