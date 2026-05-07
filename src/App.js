@@ -15,6 +15,7 @@ import {
   CloseOutlined,
   DownOutlined,
   DownloadOutlined,
+  EyeOutlined,
 } from "@ant-design/icons";
 
 import { DndContext, closestCenter } from "@dnd-kit/core";
@@ -140,7 +141,9 @@ function App() {
           );
           console.log(selectedObjects);
           const items =
-            selectedObjects.length > 0 ? selectedObjects[0].objects : [];
+            selectedObjects.length && selectedObjects > 0
+              ? selectedObjects[0].objects
+              : [];
           const runtimeIds = items.map((x) => {
             return {
               modelId: x.modelId,
@@ -303,6 +306,21 @@ function App() {
                             visible: true,
                           },
                         );
+                        await tcapi.markup.addTextMarkup([
+                          {
+                            text: object.asmPos,
+                            start: {
+                              positionX: object.center[0],
+                              positionY: object.center[1],
+                              positionZ: object.center[2],
+                            },
+                            end: {
+                              positionX: object.center[0] + 10,
+                              positionY: object.center[1],
+                              positionZ: object.center[2],
+                            },
+                          },
+                        ]);
                         await delay(timeStep);
                       }
                     }
@@ -477,6 +495,7 @@ function App() {
                                 await tcapi.viewer.getSelection();
 
                               tcapi.viewer.activateTool("pointMarkup");
+
                               // handler stored so it can be removed later
                               const onMessage = async (event) => {
                                 if (
@@ -494,7 +513,7 @@ function App() {
                                     Number(start.positionZ),
                                   ];
                                   var newAddedSequenceObjects = [];
-
+                                  tcapi.viewer.activateTool("selection");
                                   for (const selection of selections) {
                                     const objBoxes =
                                       await tcapi.viewer.getObjectBoundingBoxes(
@@ -506,6 +525,7 @@ function App() {
                                         selection.modelId,
                                         selection.objectRuntimeIds,
                                       );
+                                    tcapi.markup.removeMarkups(undefined);
 
                                     for (let i = 0; i < objBoxes.length; i++) {
                                       const box = objBoxes[i];
@@ -596,6 +616,7 @@ function App() {
                                         modelId: selection.modelId,
                                         id: box.id,
                                         distance: math.round(distance),
+                                        center: center,
                                         asmPos: asm_pos,
                                         positionCode: positionCode,
                                       });
@@ -684,6 +705,21 @@ function App() {
                                         visible: true,
                                       },
                                     );
+                                    await tcapi.markup.addTextMarkup([
+                                      {
+                                        text: object.asmPos,
+                                        start: {
+                                          positionX: object.center[0],
+                                          positionY: object.center[1],
+                                          positionZ: object.center[2],
+                                        },
+                                        end: {
+                                          positionX: object.center[0] + 10,
+                                          positionY: object.center[1],
+                                          positionZ: object.center[2],
+                                        },
+                                      },
+                                    ]);
                                     await delay(timeStep);
                                   }
                                 }
@@ -694,6 +730,29 @@ function App() {
                                   error,
                                 );
                               }
+                            }}
+                          />
+                          <Button
+                            type="text"
+                            icon={<EyeOutlined />}
+                            onClick={async () => {
+                              const tcapi = await WorkspaceAPI.connect(
+                                window.parent,
+                              );
+                              const items = sequenceObjects.filter(x=> x && x.folderId === item.id)
+                              const runtimeIds = items[0].objects.map((x) => {
+                                return {
+                                  modelId: x.modelId,
+                                  objectRuntimeIds: [x.id],
+                                };
+                              });
+                              console.log(runtimeIds);
+                              await tcapi.viewer.setSelection(
+                                {
+                                  modelObjectIds: runtimeIds,
+                                },
+                                "set",
+                              );
                             }}
                           />
                           <Popconfirm
