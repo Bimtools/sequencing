@@ -18,10 +18,17 @@ import {
   SetObjectsFailure,
   GetSequenceSuccess,
   GetSequenceFailure,
+  GetPhaseSuccess,
+  GetPhaseFailure,
+  CreatePhaseSuccess,
+  CreatePhaseFailure,
+  UpdatePhaseSuccess,
+  UpdatePhaseFailure,
+  DeletePhaseSuccess,
+  DeletePhaseFailure
 } from "./action";
 import instance from "../../interceptors/axios";
-
-function* getSequenceSaga(action) {
+function* getPhasesSaga(action) {
   try {
     //Check Sequence Folder
     const getFolderUrl = `/folders/by_path?path=${action.payload.projectName}&projectId=${action.payload.projectId}`;
@@ -34,50 +41,186 @@ function* getSequenceSaga(action) {
         parentId: response.data[0].parentId,
       });
       yield put(
-        GetSequenceSuccess({
+        GetPhaseSuccess({
           folderId: insertFolderResponse.data.id,
-          folders: [],
+          phases: [],
         }),
       );
     } else {
       //Get comment in the sequence folder
       const getCommentUrl = `/comments?objectId=${folders[0].id}&objectType=FOLDER`;
       const commentResponse = yield call(instance.get, getCommentUrl);
-      const sequences = JSON.parse(
+      const phases = JSON.parse(
         commentResponse.data.length > 0
           ? commentResponse.data[0].description
           : "[]",
       );
-
-      const sequenceObjects = [];
-      for (const sequence of sequences) {
-        const getSequenceCommentUrl = `/comments?objectId=${sequence.id}&objectType=FOLDER`;
-        const sequenceCommentResponse = yield call(
-          instance.get,
-          getSequenceCommentUrl,
-        );
-        const contents = sequenceCommentResponse.data.map((x) => {
-          return {
-            id: x.description.split("tuan")[0],
-            content: x.description.split("tuan")[1],
-          };
-        });
-        contents.sort((a, b) => parseInt(a.id) - parseInt(b.id));
-        const content = contents.map((x) => x.content).join("");
-        const objects = JSON.parse(content.length > 0 ? content : null);
-        sequenceObjects.push(objects);
-      }
-      console.log("sequenceObjects", sequenceObjects);
+      console.log(commentResponse.data);
       yield put(
-        GetSequenceSuccess({
-          commentId:
-            commentResponse.data.length > 0 ? commentResponse.data[0].id : null,
+        GetPhaseSuccess({
+          rootCommentId: commentResponse.data.length > 0 ? commentResponse.data[0].id : null,
           folderId: folders[0].id,
-          sequences: sequences,
-          sequenceObjects: sequenceObjects,
+          phases: phases,
         }),
       );
     }
+  } catch (error) {
+    console.error("Error fetching folder:", error);
+    yield put(GetPhaseFailure(error.message));
+  }
+}
+function* createPhaseSaga(action) {
+  const insertFolderUrl = `/folders`;
+  console.log(action.payload);
+  const insertFolderBody = {
+    name: action.payload.name,
+    parentId: action.payload.rootFolderId,
+  };
+  const insertFolderResponse = yield call(
+    instance.post,
+    insertFolderUrl,
+    insertFolderBody,
+  );
+  try {
+    const newPhase = {
+      id: insertFolderResponse.data.id,
+      name: action.payload.name,
+    };
+    const newPhases = [...action.payload.phases, newPhase];
+    console.log(newPhases);
+    if (action.payload.rootCommentId) {
+      //Update comment with new phase list
+      const updateCommentUrl = `/comments/${action.payload.rootCommentId}`;
+      yield call(instance.patch, updateCommentUrl, {
+        description: JSON.stringify(newPhases),
+      });
+      yield put(
+        CreatePhaseSuccess({
+          rootCommentId: action.payload.rootCommentId,
+          phases: [...action.payload.phases, newPhase],
+        }),
+      );
+    } else {
+      //Create comment with phase list
+      const createCommentUrl = `/comments`;
+      const createCommentBody = {
+        objectId: action.payload.rootFolderId,
+        objectType: "FOLDER",
+        description: JSON.stringify(newPhases),
+      };
+      console.log(createCommentBody);
+      const responseInsertComment = yield call(
+        instance.post,
+        createCommentUrl,
+        createCommentBody,
+      );
+      yield put(
+        CreatePhaseSuccess({
+          rootCommentId: responseInsertComment.data.id,
+          phases: [...action.payload.phases, newPhase],
+        }),
+      );
+    }
+  } catch (error) {
+    console.error("Error creating folder:", error);
+    yield put(CreatePhaseFailure(error.message));
+  }
+}
+function* updatePhaseSaga(action) {
+  try {
+    //Update comment with new sequence list
+    const updateCommentUrl = `/comments/${action.payload.commentId}`;
+    yield call(instance.patch, updateCommentUrl, {
+      description: JSON.stringify(action.payload.phases),
+    });
+    yield put(
+      UpdatePhaseSuccess({
+        phases: [...action.payload.phases],
+      }),
+    );
+  } catch (error) {
+    console.error("Error updating comment:", error);
+    yield put(UpdatePhaseFailure(error.message));
+  }
+}
+function* deletePhaseSaga(action) {
+  try {
+    //Delete folder
+    const deleteFolderUrl = `/folders/${action.payload.folderId}`;
+    var deleteStatus = false;
+    try {
+      const deleteFolderResponse = yield call(instance.delete, deleteFolderUrl);
+      console.log("deleteFolderResponse", deleteFolderResponse.status);
+      deleteStatus = deleteFolderResponse.status === 204;
+    } catch (error) {
+      deleteStatus = error.message.includes("404");
+    }
+    if (deleteStatus) {
+      const newPhases = action.payload.phases.filter(
+        (x) => x.id !== action.payload.folderId,
+      );
+
+      //Update comment with new sequence list
+      const updateCommentUrl = `/comments/${action.payload.rootCommentId}`;
+      yield call(instance.patch, updateCommentUrl, {
+        description: JSON.stringify(newPhases),
+      });
+      yield put(
+        DeletePhaseSuccess({
+          phases: [...newPhases],
+        }),
+      );
+    } else {
+      yield put(DeletePhaseFailure("Failed to delete phase"));
+    }
+  } catch (error) {
+    console.error("Error updating comment:", error);
+    yield put(DeletePhaseFailure(error.message));
+  }
+}
+function* getSequenceSaga(action) {
+  try {
+    //Get comment in the sequence folder
+    const getCommentUrl = `/comments?objectId=${action.payload.folderId}&objectType=FOLDER`;
+    const commentResponse = yield call(instance.get, getCommentUrl);
+
+    const sequences = JSON.parse(
+      commentResponse.data.length > 0
+        ? commentResponse.data[0].description
+        : "[]",
+    );
+
+    console.log(commentResponse.data);
+
+    const sequenceObjects = [];
+    for (const sequence of sequences) {
+      const getSequenceCommentUrl = `/comments?objectId=${sequence.id}&objectType=FOLDER`;
+      const sequenceCommentResponse = yield call(
+        instance.get,
+        getSequenceCommentUrl,
+      );
+      console.log("sequenceCommentResponse", sequenceCommentResponse);
+      const contents = sequenceCommentResponse.data.map((x) => {
+        return {
+          id: x.description.split("tuan")[0],
+          content: x.description.split("tuan")[1],
+        };
+      });
+      contents.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+      const content = contents.map((x) => x.content).join("");
+      const objects = JSON.parse(content.length > 0 ? content : null);
+      sequenceObjects.push(objects);
+    }
+    console.log("sequenceObjects", sequenceObjects);
+    yield put(
+      GetSequenceSuccess({
+        phaseCommentId:
+          commentResponse.data.length > 0 ? commentResponse.data[0].id : null,
+        phaseFolderId: action.payload.folderId,
+        sequences: sequences,
+        sequenceObjects: sequenceObjects,
+      }),
+    );
   } catch (error) {
     console.error("Error fetching folder:", error);
     yield put(GetSequenceFailure(error.message));
@@ -87,8 +230,8 @@ function* createSequenceSaga(action) {
   const insertFolderUrl = `/folders`;
   console.log(action.payload);
   const insertFolderBody = {
-    name: action.payload.name + "_" + action.payload.color,
-    parentId: action.payload.rootFolderId,
+    name: action.payload.name,
+    parentId: action.payload.phaseFolderId,
   };
   const insertFolderResponse = yield call(
     instance.post,
@@ -103,15 +246,15 @@ function* createSequenceSaga(action) {
     };
     const newSequences = [...action.payload.sequences, newSequence];
     console.log(newSequences);
-    if (action.payload.rootCommentId) {
+    if (action.payload.phaseCommentId) {
       //Update comment with new sequence list
-      const updateCommentUrl = `/comments/${action.payload.rootCommentId}`;
+      const updateCommentUrl = `/comments/${action.payload.phaseCommentId}`;
       yield call(instance.patch, updateCommentUrl, {
         description: JSON.stringify(newSequences),
       });
       yield put(
         CreateSequenceSuccess({
-          rootCommentId: action.payload.rootCommentId,
+          phaseCommentId: action.payload.phaseCommentId,
           sequences: [...action.payload.sequences, newSequence],
           sequenceObjects: [
             ...action.payload.sequenceObjects,
@@ -126,11 +269,10 @@ function* createSequenceSaga(action) {
       //Create comment with sequence list
       const createCommentUrl = `/comments`;
       const createCommentBody = {
-        objectId: action.payload.rootFolderId,
+        objectId: action.payload.phaseFolderId,
         objectType: "FOLDER",
         description: JSON.stringify(newSequences),
       };
-      console.log(createCommentBody);
       const responseInsertComment = yield call(
         instance.post,
         createCommentUrl,
@@ -138,7 +280,7 @@ function* createSequenceSaga(action) {
       );
       yield put(
         CreateSequenceSuccess({
-          rootCommentId: responseInsertComment.data.id,
+          phaseCommentId: responseInsertComment.data.id,
           sequences: [...action.payload.sequences, newSequence],
           sequenceObjects: [
             ...action.payload.sequenceObjects,
@@ -155,7 +297,6 @@ function* createSequenceSaga(action) {
     yield put(CreateSequenceFailure(error.message));
   }
 }
-
 function* updateCommentSaga(action) {
   try {
     //Update comment with new sequence list
@@ -194,7 +335,7 @@ function* deleteSequenceSaga(action) {
       );
 
       //Update comment with new sequence list
-      const updateCommentUrl = `/comments/${action.payload.rootCommentId}`;
+      const updateCommentUrl = `/comments/${action.payload.phaseCommentId}`;
       yield call(instance.patch, updateCommentUrl, {
         description: JSON.stringify(newSequences),
       });
@@ -256,6 +397,10 @@ function* setObjectsSaga(action) {
 }
 
 function* sequenceSaga() {
+  yield takeEvery("GET_PHASE_REQUEST", getPhasesSaga);
+  yield takeEvery("CREATE_PHASE_REQUEST", createPhaseSaga);
+  yield takeEvery("UPDATE_PHASE_REQUEST", updatePhaseSaga);
+  yield takeEvery("DELETE_PHASE_REQUEST", deletePhaseSaga);
   yield takeEvery("DELETE_SEQUENCE_REQUEST", deleteSequenceSaga);
   yield takeEvery("UPDATE_COMMENT_REQUEST", updateCommentSaga);
   yield takeEvery("CREATE_SEQUENCE_REQUEST", createSequenceSaga);

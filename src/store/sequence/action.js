@@ -1,5 +1,81 @@
 import * as actionType from './actionTypes'
 
+export function CreatePhaseRequest(payload){
+    return{
+        type:actionType.CREATE_PHASE_REQUEST,
+        payload:payload
+    }
+}
+export function CreatePhaseSuccess(payload){
+    return{
+        type:actionType.CREATE_PHASE_SUCCESS,
+        payload:payload
+    }
+}
+export function CreatePhaseFailure(payload){
+    return{
+        type:actionType.CREATE_PHASE_FAILURE,
+        payload:payload
+    }
+}
+
+export function UpdatePhaseRequest(payload){
+    return{
+        type:actionType.UPDATE_PHASE_REQUEST,
+        payload:payload
+    }
+}
+export function UpdatePhaseSuccess(payload){
+    return{
+        type:actionType.UPDATE_PHASE_SUCCESS,
+        payload:payload
+    }
+}
+export function UpdatePhaseFailure(payload){
+    return{
+        type:actionType.UPDATE_PHASE_FAILURE,
+        payload:payload
+    }
+}
+
+export function GetPhaseRequest(payload){
+    return{
+        type:actionType.GET_PHASE_REQUEST,
+        payload:payload
+    }
+}
+export function GetPhaseSuccess(payload){
+    return{
+        type:actionType.GET_PHASE_SUCCESS,
+        payload:payload
+    }
+}
+export function GetPhaseFailure(payload){
+    return{
+        type:actionType.GET_PHASE_FAILURE,
+        payload:payload
+    }
+}
+
+export function DeletePhaseRequest(payload){
+    return{
+        type:actionType.DELETE_PHASE_REQUEST,
+        payload:payload
+    }
+}
+export function DeletePhaseSuccess(payload){
+    return{
+        type:actionType.DELETE_PHASE_SUCCESS,
+        payload:payload
+    }
+}
+export function DeletePhaseFailure(payload){
+    return{
+        type:actionType.DELETE_PHASE_FAILURE,
+        payload:payload
+    }
+}
+
 export function CreateSequenceRequest(payload){
     return{
         type:actionType.CREATE_SEQUENCE_REQUEST,

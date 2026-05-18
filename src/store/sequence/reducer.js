@@ -2,6 +2,9 @@ import * as type from "./actionTypes";
 const initialState = {
   rootFolderId: null,
   rootCommentId: null,
+  phaseFolderId: null,
+  phaseCommentId: null,
+  phases: [],
   sequences: [],
   sequenceObjects: [],
   selectedObjects: [],
@@ -11,6 +14,99 @@ const initialState = {
 };
 const reducers = (state = initialState, action) => {
   switch (action.type) {
+    case type.CREATE_PHASE_REQUEST:
+      return {
+        ...state,
+        pending: true,
+      };
+    case type.CREATE_PHASE_SUCCESS:
+      return {
+        ...state,
+        pending: false,
+        rootCommentId: action.payload.rootCommentId,
+        phases: [...action.payload.phases],
+      };
+    case type.CREATE_PHASE_FAILURE:
+      return {
+        ...state,
+        pending: false,
+        error: action.payload,
+      };
+    case type.UPDATE_PHASE_REQUEST:
+      return {
+        ...state,
+        pending: true,
+      };
+    case type.UPDATE_PHASE_SUCCESS:
+      return {
+        ...state,
+        pending: false,
+        phases: [...action.payload.phases],
+      };
+    case type.UPDATE_PHASE_FAILURE:
+      return {
+        ...state,
+        pending: false,
+        error: action.payload,
+      };
+    case type.GET_PHASE_REQUEST:
+      return {
+        ...state,
+        pending: true,
+      };
+    case type.GET_PHASE_SUCCESS:
+      return {
+        ...state,
+        pending: false,
+        rootCommentId: action.payload.rootCommentId,
+        rootFolderId: action.payload.folderId,
+        phases: Array.isArray(action.payload.phases)
+          ? action.payload.phases
+          : [],
+      };
+    case type.GET_PHASE_FAILURE:
+      return {
+        ...state,
+        pending: false,
+        error: action.error,
+      };
+    case type.DELETE_PHASE_REQUEST:
+      return {
+        ...state,
+        pending: true,
+      };
+    case type.DELETE_PHASE_SUCCESS:
+      return {
+        ...state,
+        pending: false,
+        phases: [...action.payload.phases],
+        sequences: [],
+        sequenceObjects: [],
+        selectedObjects: [],
+      };
+    case type.DELETE_PHASE_FAILURE:
+      return {
+        ...state,
+        pending: false,
+        error: action.error,
+      };
+    case type.UPDATE_PHASE_REQUEST:
+      return {
+        ...state,
+        pending: true,
+      };
+    case type.UPDATE_PHASE_SUCCESS:
+      return {
+        ...state,
+        pending: false,
+        phases: [...action.payload.phases],
+      };
+    case type.UPDATE_PHASE_FAILURE:
+      return {
+        ...state,
+        pending: false,
+        error: action.error,
+      };
     case type.CREATE_SEQUENCE_REQUEST:
       return {
         ...state,
@@ -20,7 +116,7 @@ const reducers = (state = initialState, action) => {
       return {
         ...state,
         pending: false,
-        rootCommentId: action.payload.rootCommentId,
+        phaseCommentId: action.payload.phaseCommentId,
         sequences: [...action.payload.sequences],
         sequenceObjects: [...action.payload.sequenceObjects],
       };
@@ -56,14 +152,15 @@ const reducers = (state = initialState, action) => {
       return {
         ...state,
         pending: false,
-        rootCommentId: action.payload.commentId,
-        rootFolderId: action.payload.folderId,
+        phaseFolderId: action.payload.phaseFolderId,
+        phaseCommentId: action.payload.phaseCommentId,
         sequences: Array.isArray(action.payload.sequences)
           ? action.payload.sequences
           : [],
         sequenceObjects: Array.isArray(action.payload.sequenceObjects)
           ? action.payload.sequenceObjects
           : [],
+        selectedObjects: [],
       };
     case type.GET_SEQUENCE_FAILURE:
       return {
@@ -82,6 +179,7 @@ const reducers = (state = initialState, action) => {
         pending: false,
         sequences: [...action.payload.sequences],
         sequenceObjects: [...action.payload.sequenceObjects],
+        selectedObjects: [],
       };
     case type.DELETE_SEQUENCE_FAILURE:
       return {
