@@ -18,7 +18,7 @@ import {
   EyeOutlined,
 } from "@ant-design/icons";
 
-import { DndContext, closestCenter } from "@dnd-kit/core";
+import { DndContext, closestCenter, rectIntersection } from "@dnd-kit/core";
 import {
   SortableContext,
   useSortable,
@@ -38,6 +38,7 @@ import {
   Form,
   Modal,
   Collapse,
+  Select,
 } from "antd";
 import { Colorpicker, ColorPickerValue } from "antd-colorpicker";
 
@@ -53,6 +54,8 @@ import {
   CreatePhaseRequest,
   UpdatePhaseRequest,
   DeletePhaseRequest,
+  GetSourceSequenceRequest,
+  CopySequenceRequest,
 } from "./store/sequence/action";
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -63,6 +66,9 @@ function App() {
   const dispatch = useDispatch();
   const sequenceState = useSelector((state) => state.sequence);
   const sequences = useSelector((state) => state.sequence.sequences);
+  const sequencesToBeCopied = useSelector(
+    (state) => state.sequence.sequencesToBeCopied,
+  );
   const phases = useSelector((state) => state.sequence.phases);
   const sequenceObjects = useSelector(
     (state) => state.sequence.sequenceObjects,
@@ -81,6 +87,7 @@ function App() {
   const [step, setStep] = useState("");
   const [timeStep, setTimeStep] = useState(100);
   const [colorDialog, setColorDialog] = useState(false);
+  const [activeKey, setActiveKey] = useState(null);
   const [color, setColor] = useState({
     rgb: {
       r: 248,
@@ -88,6 +95,7 @@ function App() {
       g: 28,
     },
   });
+  const [sourcePhase, setSourcePhase] = useState(null);
 
   function exportToExcel(data, fileName = "Sequencing.xlsx") {
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -438,13 +446,20 @@ function App() {
           </div>
           <Collapse
             style={{ marginTop: "5px" }}
-            onChange={(activeKey) => {
+            activeKey={activeKey}
+            onChange={(activeKeys) => {
+              setActiveKey(
+                activeKeys.length > 0
+                  ? activeKeys[activeKeys.length - 1]
+                  : null,
+              );
               try {
                 const phase = phases.filter(
-                  (x) => x.id === activeKey[activeKey.length - 1],
+                  (x) => x.id === activeKeys[activeKeys.length - 1],
                 )[0];
                 setPhaseName(phase.name);
                 setPhaseFolderId(phase.id);
+                console.log(phase.id);
                 dispatch(GetSequenceRequest({ folderId: phase.id }));
               } catch (error) {}
             }}
@@ -538,6 +553,57 @@ function App() {
                     }}
                   >
                     Modify
+                  </Button>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    maxWidth: "350px",
+                    marginTop: 2,
+                    gap: 5,
+                  }}
+                >
+                  <Select
+                    style={{ flex: 1 }}
+                    placeholder="Select Phase"
+                    value={sourcePhase}
+                    onChange={(e) => {
+                      setSourcePhase(e);
+                      dispatch(GetSourceSequenceRequest({ folderId: e }));
+                    }}
+                  >
+                    {phases
+                      .filter((x) => x.name !== item.name)
+                      .map((x) => (
+                        <Select.Option key={x.id}>
+                          {x.name}
+                        </Select.Option>
+                      ))}
+                  </Select>
+                  <Button
+                    type="primary"
+                    onClick={() => {
+                      const newSequences = [
+                        ...sequences,
+                        ...sequencesToBeCopied,
+                      ].reduce((acc, current) => {
+                        if (!acc.some((x) => x.id === current.id)) {
+                          acc.push(current);
+                        }
+                        return acc;
+                      }, []);
+                      console.log(newSequences);
+                      dispatch(
+                        CopySequenceRequest({
+                          phaseFolderId: phaseFolderId,
+                          commentId: phaseCommentId,
+                          sequences: sequences,
+                          sequencesToBeCopied: newSequences,
+                        }),
+                      );
+                    }}
+                  >
+                    Copy Category
                   </Button>
                 </div>
                 <Splitter
@@ -758,118 +824,135 @@ function App() {
                                     );
                                   }}
                                 />
-                                {(item.name !== 'Grid' && item.name !== 'grid' && item.name !== 'GRID')&&(<Button
-                                  type="text"
-                                  icon={<PlayCircleOutlined />}
-                                  onClick={async () => {
-                                    const tcapi = await WorkspaceAPI.connect(
-                                      window.parent,
-                                    );
-                                    tcapi.markup.removeMarkups(undefined);
-                                    const delay = (ms) =>
-                                      new Promise((res) => setTimeout(res, ms));
-                                    var accumulatedObjects = [];
-                                    const sequences1 = sequences.filter(
-                                      (x) =>
-                                        x &&
-                                        (x.name === "Grid" ||
-                                          x.name === "GRID" ||
-                                          x.name === "grid" ||
-                                          x.name === item.name),
-                                    );
-                                    console.log(sequenceObjects);
-                                    for (const sequence of sequences1) {
-                                      const sequenceObjectsTobeShown =
-                                        sequenceObjects.filter(
+                                {item.name !== "Grid" &&
+                                  item.name !== "grid" &&
+                                  item.name !== "GRID" && (
+                                    <Button
+                                      type="text"
+                                      icon={<PlayCircleOutlined />}
+                                      onClick={async () => {
+                                        const tcapi =
+                                          await WorkspaceAPI.connect(
+                                            window.parent,
+                                          );
+                                        tcapi.markup.removeMarkups(undefined);
+                                        const delay = (ms) =>
+                                          new Promise((res) =>
+                                            setTimeout(res, ms),
+                                          );
+                                        var accumulatedObjects = [];
+                                        const sequences1 = sequences.filter(
                                           (x) =>
-                                            x && x.folderId === sequence.id,
+                                            x &&
+                                            (x.name === "Grid" ||
+                                              x.name === "GRID" ||
+                                              x.name === "grid" ||
+                                              x.name === item.name),
                                         );
-                                      const selectedSequence = sequences.filter(
-                                        (x) => x.id == sequence.id,
-                                      );
-                                      try {
-                                        const objects =
-                                          sequenceObjectsTobeShown?.[0]
-                                            ?.objects ?? [];
-                                        if (objects.length > 0) {
-                                          for (const object of objects) {
-                                            const index =
-                                              accumulatedObjects.findIndex(
-                                                (x) =>
-                                                  x.modelId === object.modelId,
-                                              );
-                                            if (index >= 0) {
-                                              accumulatedObjects[
-                                                index
-                                              ].entityIds.push(object.id);
-                                            } else {
-                                              accumulatedObjects.push({
-                                                modelId: object.modelId,
-                                                entityIds: [object.id],
-                                              });
-                                            }
-                                            await tcapi.viewer.isolateEntities(
-                                              accumulatedObjects,
+                                        console.log(sequenceObjects);
+                                        for (const sequence of sequences1) {
+                                          const sequenceObjectsTobeShown =
+                                            sequenceObjects.filter(
+                                              (x) =>
+                                                x && x.folderId === sequence.id,
                                             );
-                                            await tcapi.viewer.setObjectState(
-                                              {
-                                                modelObjectIds: [
-                                                  {
+                                          const selectedSequence =
+                                            sequences.filter(
+                                              (x) => x.id == sequence.id,
+                                            );
+                                          try {
+                                            const objects =
+                                              sequenceObjectsTobeShown?.[0]
+                                                ?.objects ?? [];
+                                            if (objects.length > 0) {
+                                              for (const object of objects) {
+                                                const index =
+                                                  accumulatedObjects.findIndex(
+                                                    (x) =>
+                                                      x.modelId ===
+                                                      object.modelId,
+                                                  );
+                                                if (index >= 0) {
+                                                  accumulatedObjects[
+                                                    index
+                                                  ].entityIds.push(object.id);
+                                                } else {
+                                                  accumulatedObjects.push({
                                                     modelId: object.modelId,
-                                                    objectRuntimeIds: [
-                                                      object.id,
+                                                    entityIds: [object.id],
+                                                  });
+                                                }
+                                                await tcapi.viewer.isolateEntities(
+                                                  accumulatedObjects,
+                                                );
+                                                await tcapi.viewer.setObjectState(
+                                                  {
+                                                    modelObjectIds: [
+                                                      {
+                                                        modelId: object.modelId,
+                                                        objectRuntimeIds: [
+                                                          object.id,
+                                                        ],
+                                                      },
                                                     ],
                                                   },
-                                                ],
-                                              },
-                                              {
-                                                color: {
-                                                  r: selectedSequence[0].color
-                                                    .r,
-                                                  g: selectedSequence[0].color
-                                                    .g,
-                                                  b: selectedSequence[0].color
-                                                    .b,
-                                                },
-                                                visible: true,
-                                              },
-                                            );
-                                            if (
-                                              sequence.name !== "Grid" &&
-                                              sequence.name !== "grid" &&
-                                              sequence.name !== "GRID"
-                                            ) {
-                                              await tcapi.markup.addTextMarkup([
-                                                {
-                                                  text: object.asmPos,
-                                                  start: {
-                                                    positionX: object.center[0],
-                                                    positionY: object.center[1],
-                                                    positionZ: object.center[2],
+                                                  {
+                                                    color: {
+                                                      r: selectedSequence[0]
+                                                        .color.r,
+                                                      g: selectedSequence[0]
+                                                        .color.g,
+                                                      b: selectedSequence[0]
+                                                        .color.b,
+                                                    },
+                                                    visible: true,
                                                   },
-                                                  end: {
-                                                    positionX:
-                                                      object.center[0] + 10,
-                                                    positionY: object.center[1],
-                                                    positionZ: object.center[2],
-                                                  },
-                                                },
-                                              ]);
+                                                );
+                                                if (
+                                                  sequence.name !== "Grid" &&
+                                                  sequence.name !== "grid" &&
+                                                  sequence.name !== "GRID"
+                                                ) {
+                                                  await tcapi.markup.addTextMarkup(
+                                                    [
+                                                      {
+                                                        text: object.asmPos,
+                                                        start: {
+                                                          positionX:
+                                                            object.center[0],
+                                                          positionY:
+                                                            object.center[1],
+                                                          positionZ:
+                                                            object.center[2],
+                                                        },
+                                                        end: {
+                                                          positionX:
+                                                            object.center[0] +
+                                                            10,
+                                                          positionY:
+                                                            object.center[1],
+                                                          positionZ:
+                                                            object.center[2],
+                                                        },
+                                                      },
+                                                    ],
+                                                  );
+                                                }
+                                                await delay(timeStep);
+                                              }
                                             }
-                                            await delay(timeStep);
+                                          } catch (error) {
+                                            console.error(
+                                              "Error processing sequence",
+                                              sequence.id,
+                                              error,
+                                            );
                                           }
                                         }
-                                      } catch (error) {
-                                        console.error(
-                                          "Error processing sequence",
-                                          sequence.id,
-                                          error,
-                                        );
-                                      }
-                                    }
-                                  }}
-                                />)}
-                                
+                                      }}
+                                    />
+                                  )}
+
                                 <Button
                                   type="text"
                                   icon={<EyeOutlined />}

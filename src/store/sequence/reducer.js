@@ -6,6 +6,7 @@ const initialState = {
   phaseCommentId: null,
   phases: [],
   sequences: [],
+  sequencesToBeCopied: [],
   sequenceObjects: [],
   selectedObjects: [],
   selectedGroup: null,
@@ -168,6 +169,25 @@ const reducers = (state = initialState, action) => {
         pending: false,
         error: action.error,
       };
+    case type.GET_SOURCE_SEQUENCE_REQUEST:
+      return {
+        ...state,
+        pending: true,
+      };
+    case type.GET_SOURCE_SEQUENCE_SUCCESS:
+      return {
+        ...state,
+        pending: false,
+        sequencesToBeCopied: Array.isArray(action.payload.sequences)
+          ? action.payload.sequences
+          : [],
+      };
+    case type.GET_SOURCE_SEQUENCE_FAILURE:
+      return {
+        ...state,
+        pending: false,
+        error: action.error,
+      };
     case type.DELETE_SEQUENCE_REQUEST:
       return {
         ...state,
@@ -196,6 +216,7 @@ const reducers = (state = initialState, action) => {
       return {
         ...state,
         pending: false,
+        phaseCommentId: action.payload.phaseCommentId,
         sequences: [...action.payload.folders],
       };
     case type.UPDATE_COMMENT_FAILURE:

@@ -133,6 +133,44 @@ export function GetSequenceFailure(payload){
     }
 }
 
+export function GetSourceSequenceRequest(payload){
+    return{
+        type:actionType.GET_SOURCE_SEQUENCE_REQUEST,
+        payload:payload
+    }
+}
+export function GetSourceSequenceSuccess(payload){
+    return{
+        type:actionType.GET_SOURCE_SEQUENCE_SUCCESS,
+        payload:payload
+    }
+}
+export function GetSourceSequenceFailure(payload){
+    return{
+        type:actionType.GET_SOURCE_SEQUENCE_FAILURE,
+        payload:payload
+    }
+}
+
+export function CopySequenceRequest(payload){
+    return{
+        type:actionType.COPY_SEQUENCE_REQUEST,
+        payload:payload
+    }
+}
+export function CopySequenceSuccess(payload){
+    return{
+        type:actionType.COPY_SEQUENCE_SUCCESS,
+        payload:payload
+    }
+}
+export function CopySequenceFailure(payload){
+    return{
+        type:actionType.COPY_SEQUENCE_FAILURE,
+        payload:payload
+    }
+}
+
 export function DeleteSequenceRequest(payload){
     return{
         type:actionType.DELETE_SEQUENCE_REQUEST,
