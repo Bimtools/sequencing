@@ -268,6 +268,7 @@ function* createSequenceSaga(action) {
       id: insertFolderResponse.data.id,
       name: action.payload.name,
       color: action.payload.color,
+      check: action.payload.check
     };
     const newSequences = [...action.payload.sequences, newSequence];
     console.log(newSequences);
@@ -383,6 +384,7 @@ function* updateCommentSaga(action) {
     });
     yield put(
       UpdateCommentSuccess({
+        phaseCommentId: action.payload.commentId,
         folders: [...action.payload.sequences],
       }),
     );

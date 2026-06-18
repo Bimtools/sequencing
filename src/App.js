@@ -39,7 +39,10 @@ import {
   Modal,
   Collapse,
   Select,
+  DatePicker,
+  Checkbox,
 } from "antd";
+import dayjs from "dayjs";
 import { Colorpicker, ColorPickerValue } from "antd-colorpicker";
 
 import {
@@ -96,6 +99,8 @@ function App() {
     },
   });
   const [sourcePhase, setSourcePhase] = useState(null);
+  const [reportDate, setReportDate] = useState();
+  const [allSequenceChecked, setAllSequenceChecked] = useState(false);
 
   function exportToExcel(data, fileName = "Sequencing.xlsx") {
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -156,7 +161,6 @@ function App() {
           const selectedObjects = sequenceObjects.filter(
             (x) => x && x.folderId === item.id,
           );
-          console.log(selectedObjects);
           const items =
             selectedObjects.length && selectedObjects > 0
               ? selectedObjects[0].objects
@@ -167,7 +171,6 @@ function App() {
               objectRuntimeIds: [x.id],
             };
           });
-          console.log(runtimeIds);
           setStep(item.name);
           setColor({ rgb: item.color });
           dispatch(
@@ -182,13 +185,43 @@ function App() {
       >
         <div style={{ display: "flex", alignItems: "center" }}>
           {icon && (
-            <span {...listeners} style={{ cursor: "grab", marginRight: 12 }}>
+            <span {...listeners} style={{ cursor: "grab", marginRight: 2 }}>
               {icon}
             </span>
           )}
-          <strong>{item.name}</strong>
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <Checkbox
+              checked={item.check ?? false}
+              onChange={(e) => {
+                const newSequences = sequences.map((x) =>
+                  x.id !== item.id ? x : { ...x, check: e.target.checked },
+                );
+                console.log(phaseCommentId);
+                dispatch(
+                  UpdateCommentRequest({
+                    commentId: phaseCommentId,
+                    sequences: newSequences,
+                  }),
+                );
+              }}
+            />
+            <strong> {item.name}</strong>
+          </div>
         </div>
-        {children}
+
+        {children && (
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {children}
+          </div>
+        )}
       </List.Item>
     );
   }
@@ -229,7 +262,16 @@ function App() {
           )}
           <strong>{item.asmPos === "" ? item.id : item.asmPos}</strong>
         </div>
-        {children}
+
+        {children && (
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {children}
+          </div>
+        )}
       </List.Item>
     );
   }
@@ -266,6 +308,13 @@ function App() {
               value={timeStep}
               onChange={(e) => setTimeStep(Number(e.target.value))}
             />
+            <Text style={{ margin: 0, alignContent: "center" }}>
+              All Sequence
+            </Text>
+            <Checkbox
+              checked={allSequenceChecked}
+              onChange={(e) => setAllSequenceChecked(e.target.checked)}
+            />
             <Button
               type="primary"
               style={{ width: 100 }}
@@ -275,77 +324,81 @@ function App() {
                 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
                 var accumulatedObjects = [];
                 for (const sequence of sequences) {
-                  const sequenceObjectsTobeShown = sequenceObjects.filter(
-                    (x) => x && x.folderId === sequence.id,
-                  );
-                  const selectedSequence = sequences.filter(
-                    (x) => x && x.id == sequence.id,
-                  );
-                  try {
-                    const objects =
-                      sequenceObjectsTobeShown?.[0]?.objects ?? [];
-                    if (objects.length > 0) {
-                      for (const object of objects) {
-                        const index = accumulatedObjects.findIndex(
-                          (x) => x.modelId === object.modelId,
-                        );
-                        if (index >= 0) {
-                          accumulatedObjects[index].entityIds.push(object.id);
-                        } else {
-                          accumulatedObjects.push({
-                            modelId: object.modelId,
-                            entityIds: [object.id],
-                          });
-                        }
-                        await tcapi.viewer.isolateEntities(accumulatedObjects);
-                        await tcapi.viewer.setObjectState(
-                          {
-                            modelObjectIds: [
-                              {
-                                modelId: object.modelId,
-                                objectRuntimeIds: [object.id],
-                              },
-                            ],
-                          },
-                          {
-                            color: {
-                              r: selectedSequence[0].color.r,
-                              g: selectedSequence[0].color.g,
-                              b: selectedSequence[0].color.b,
-                            },
-                            visible: true,
-                          },
-                        );
-                        if (
-                          sequence.name !== "Grid" &&
-                          sequence.name !== "grid" &&
-                          sequence.name !== "GRID"
-                        ) {
-                          await tcapi.markup.addTextMarkup([
-                            {
-                              text: object.asmPos,
-                              start: {
-                                positionX: object.center[0],
-                                positionY: object.center[1],
-                                positionZ: object.center[2],
-                              },
-                              end: {
-                                positionX: object.center[0] + 10,
-                                positionY: object.center[1],
-                                positionZ: object.center[2],
-                              },
-                            },
-                          ]);
-                        }
-                        await delay(timeStep);
-                      }
-                    }
-                  } catch (error) {
-                    console.error(
-                      "Error processing sequence",
-                      sequence.id,
-                      error,
+                  if (sequence.check || allSequenceChecked) {
+                    const sequenceObjectsTobeShown = sequenceObjects.filter(
+                      (x) => x && x.folderId === sequence.id,
                     );
+                    const selectedSequence = sequences.filter(
+                      (x) => x && x.id == sequence.id,
+                    );
+                    try {
+                      const objects =
+                        sequenceObjectsTobeShown?.[0]?.objects ?? [];
+                      if (objects.length > 0) {
+                        for (const object of objects) {
+                          const index = accumulatedObjects.findIndex(
+                            (x) => x.modelId === object.modelId,
+                          );
+                          if (index >= 0) {
+                            accumulatedObjects[index].entityIds.push(object.id);
+                          } else {
+                            accumulatedObjects.push({
+                              modelId: object.modelId,
+                              entityIds: [object.id],
+                            });
+                          }
+                          await tcapi.viewer.isolateEntities(
+                            accumulatedObjects,
+                          );
+                          await tcapi.viewer.setObjectState(
+                            {
+                              modelObjectIds: [
+                                {
+                                  modelId: object.modelId,
+                                  objectRuntimeIds: [object.id],
+                                },
+                              ],
+                            },
+                            {
+                              color: {
+                                r: selectedSequence[0].color.r,
+                                g: selectedSequence[0].color.g,
+                                b: selectedSequence[0].color.b,
+                              },
+                              visible: true,
+                            },
+                          );
+                          if (
+                            sequence.name !== "Grid" &&
+                            sequence.name !== "grid" &&
+                            sequence.name !== "GRID"
+                          ) {
+                            await tcapi.markup.addTextMarkup([
+                              {
+                                text: object.asmPos,
+                                start: {
+                                  positionX: object.center[0],
+                                  positionY: object.center[1],
+                                  positionZ: object.center[2],
+                                },
+                                end: {
+                                  positionX: object.center[0] + 10,
+                                  positionY: object.center[1],
+                                  positionZ: object.center[2],
+                                },
+                              },
+                            ]);
+                          }
+                          await delay(timeStep);
+                        }
+                      }
+                    } catch (error) {
+                      console.error(
+                        "Error processing sequence",
+                        sequence.id,
+                        error,
+                      );
+                    }
                   }
                 }
               }}
@@ -522,6 +575,7 @@ function App() {
                         CreateSequenceRequest({
                           name: step,
                           color: color.rgb,
+                          check: false,
                           phaseFolderId: phaseFolderId,
                           phaseCommentId: phaseCommentId,
                           sequences: sequences,
@@ -575,9 +629,7 @@ function App() {
                     {phases
                       .filter((x) => x.name !== item.name)
                       .map((x) => (
-                        <Select.Option key={x.id}>
-                          {x.name}
-                        </Select.Option>
+                        <Select.Option key={x.id}>{x.name}</Select.Option>
                       ))}
                   </Select>
                   <Button
@@ -788,6 +840,9 @@ function App() {
                                               distance: math.round(distance),
                                               center: center,
                                               asmPos: asm_pos,
+                                              date: dayjs().format(
+                                                "DD-MM-YYYY",
+                                              ),
                                               positionCode: positionCode,
                                             });
                                           }
@@ -814,6 +869,11 @@ function App() {
                                         console.log(newSequenceObjects);
                                         dispatch(
                                           SetObjectsRequest(newSequenceObjects),
+                                        );
+                                        dispatch(
+                                          SelectObjectsSuccess(
+                                            newSequenceObjects,
+                                          ),
                                         );
                                       }
                                     };
@@ -917,6 +977,11 @@ function App() {
                                                     [
                                                       {
                                                         text: object.asmPos,
+                                                        color: {
+                                                          r: 21,
+                                                          g: 101,
+                                                          b: 192,
+                                                        },
                                                         start: {
                                                           positionX:
                                                             object.center[0],
@@ -1041,6 +1106,36 @@ function App() {
                                   gap: 8,
                                 }}
                               >
+                                <DatePicker
+                                  format="DD-MM-YYYY"
+                                  value={dayjs(item.date, "DD-MM-YYYY")}
+                                  getPopupContainer={(trigger) =>
+                                    trigger.parentElement
+                                  }
+                                  onChange={(date, dateString) => {
+                                    const filteredObjects = selectedObjects.map(
+                                      (obj) => {
+                                        if (
+                                          obj.modelId === item.modelId &&
+                                          obj.id === item.id
+                                        ) {
+                                          return { ...obj, date: dateString };
+                                        }
+                                        return obj;
+                                      },
+                                    );
+                                    const newSequenceObjects = {
+                                      folderId: selectedGroup,
+                                      objects: filteredObjects,
+                                    };
+                                    dispatch(
+                                      SetObjectsRequest(newSequenceObjects),
+                                    );
+                                    dispatch(
+                                      SelectObjectsSuccess(newSequenceObjects),
+                                    );
+                                  }}
+                                />
                                 <Button
                                   type="text"
                                   icon={<CloseOutlined />}
