@@ -105,6 +105,7 @@ function App() {
   function exportToExcel(data, fileName = "Sequencing.xlsx") {
     const worksheet = XLSX.utils.json_to_sheet(data);
 
+    //Date formatting for the "date" column
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
 
