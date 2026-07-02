@@ -20,17 +20,17 @@ import {
   GetSequenceFailure,
   GetSourceSequenceSuccess,
   GetSourceSequenceFailure,
-  GetPhaseSuccess,
-  GetPhaseFailure,
-  CreatePhaseSuccess,
-  CreatePhaseFailure,
-  UpdatePhaseSuccess,
-  UpdatePhaseFailure,
-  DeletePhaseSuccess,
-  DeletePhaseFailure,
+  GetPlanSuccess,
+  GetPlanFailure,
+  CreatePlanSuccess,
+  CreatePlanFailure,
+  UpdatePlanSuccess,
+  UpdatePlanFailure,
+  DeletePlanSuccess,
+  DeletePlanFailure,
 } from "./action";
 import instance from "../../interceptors/axios";
-function* getPhasesSaga(action) {
+function* getPlansSaga(action) {
   try {
     //Check Sequence Folder
     const getFolderUrl = `/folders/by_path?path=${action.payload.projectName}&projectId=${action.payload.projectId}`;
@@ -43,7 +43,7 @@ function* getPhasesSaga(action) {
         parentId: response.data[0].parentId,
       });
       yield put(
-        GetPhaseSuccess({
+        GetPlanSuccess({
           folderId: insertFolderResponse.data.id,
           phases: [],
         }),
@@ -59,7 +59,7 @@ function* getPhasesSaga(action) {
       );
       console.log(commentResponse.data);
       yield put(
-        GetPhaseSuccess({
+        GetPlanSuccess({
           rootCommentId:
             commentResponse.data.length > 0 ? commentResponse.data[0].id : null,
           folderId: folders[0].id,
@@ -69,10 +69,10 @@ function* getPhasesSaga(action) {
     }
   } catch (error) {
     console.error("Error fetching folder:", error);
-    yield put(GetPhaseFailure(error.message));
+    yield put(GetPlanFailure(error.message));
   }
 }
-function* createPhaseSaga(action) {
+function* createPlanSaga(action) {
   const insertFolderUrl = `/folders`;
   console.log(action.payload);
   const insertFolderBody = {
@@ -98,7 +98,7 @@ function* createPhaseSaga(action) {
         description: JSON.stringify(newPhases),
       });
       yield put(
-        CreatePhaseSuccess({
+        CreatePlanSuccess({
           rootCommentId: action.payload.rootCommentId,
           phases: [...action.payload.phases, newPhase],
         }),
@@ -118,7 +118,7 @@ function* createPhaseSaga(action) {
         createCommentBody,
       );
       yield put(
-        CreatePhaseSuccess({
+        CreatePlanSuccess({
           rootCommentId: responseInsertComment.data.id,
           phases: [...action.payload.phases, newPhase],
         }),
@@ -126,10 +126,10 @@ function* createPhaseSaga(action) {
     }
   } catch (error) {
     console.error("Error creating folder:", error);
-    yield put(CreatePhaseFailure(error.message));
+    yield put(CreatePlanFailure(error.message));
   }
 }
-function* updatePhaseSaga(action) {
+function* updatePlanSaga(action) {
   try {
     //Update comment with new sequence list
     const updateCommentUrl = `/comments/${action.payload.commentId}`;
@@ -137,16 +137,16 @@ function* updatePhaseSaga(action) {
       description: JSON.stringify(action.payload.phases),
     });
     yield put(
-      UpdatePhaseSuccess({
+      UpdatePlanSuccess({
         phases: [...action.payload.phases],
       }),
     );
   } catch (error) {
     console.error("Error updating comment:", error);
-    yield put(UpdatePhaseFailure(error.message));
+    yield put(UpdatePlanFailure(error.message));
   }
 }
-function* deletePhaseSaga(action) {
+function* deletePlanSaga(action) {
   try {
     //Delete folder
     const deleteFolderUrl = `/folders/${action.payload.folderId}`;
@@ -169,16 +169,16 @@ function* deletePhaseSaga(action) {
         description: JSON.stringify(newPhases),
       });
       yield put(
-        DeletePhaseSuccess({
+        DeletePlanSuccess({
           phases: [...newPhases],
         }),
       );
     } else {
-      yield put(DeletePhaseFailure("Failed to delete phase"));
+      yield put(DeletePlanFailure("Failed to delete plan"));
     }
   } catch (error) {
     console.error("Error updating comment:", error);
-    yield put(DeletePhaseFailure(error.message));
+    yield put(DeletePlanFailure(error.message));
   }
 }
 function* getSequenceSaga(action) {
@@ -476,10 +476,10 @@ function* setObjectsSaga(action) {
 }
 
 function* sequenceSaga() {
-  yield takeEvery("GET_PHASE_REQUEST", getPhasesSaga);
-  yield takeEvery("CREATE_PHASE_REQUEST", createPhaseSaga);
-  yield takeEvery("UPDATE_PHASE_REQUEST", updatePhaseSaga);
-  yield takeEvery("DELETE_PHASE_REQUEST", deletePhaseSaga);
+  yield takeEvery("GET_PLAN_REQUEST", getPlansSaga);
+  yield takeEvery("CREATE_PLAN_REQUEST", createPlanSaga);
+  yield takeEvery("UPDATE_PLAN_REQUEST", updatePlanSaga);
+  yield takeEvery("DELETE_PLAN_REQUEST", deletePlanSaga);
   yield takeEvery("DELETE_SEQUENCE_REQUEST", deleteSequenceSaga);
   yield takeEvery("UPDATE_COMMENT_REQUEST", updateCommentSaga);
   yield takeEvery("CREATE_SEQUENCE_REQUEST", createSequenceSaga);

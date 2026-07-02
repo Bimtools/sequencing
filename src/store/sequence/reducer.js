@@ -15,47 +15,47 @@ const initialState = {
 };
 const reducers = (state = initialState, action) => {
   switch (action.type) {
-    case type.CREATE_PHASE_REQUEST:
+    case type.CREATE_PLAN_REQUEST:
       return {
         ...state,
         pending: true,
       };
-    case type.CREATE_PHASE_SUCCESS:
+    case type.CREATE_PLAN_SUCCESS:
       return {
         ...state,
         pending: false,
         rootCommentId: action.payload.rootCommentId,
         phases: [...action.payload.phases],
       };
-    case type.CREATE_PHASE_FAILURE:
+    case type.CREATE_PLAN_FAILURE:
       return {
         ...state,
         pending: false,
         error: action.payload,
       };
-    case type.UPDATE_PHASE_REQUEST:
+    case type.UPDATE_PLAN_REQUEST:
       return {
         ...state,
         pending: true,
       };
-    case type.UPDATE_PHASE_SUCCESS:
+    case type.UPDATE_PLAN_SUCCESS:
       return {
         ...state,
         pending: false,
         phases: [...action.payload.phases],
       };
-    case type.UPDATE_PHASE_FAILURE:
+    case type.UPDATE_PLAN_FAILURE:
       return {
         ...state,
         pending: false,
         error: action.payload,
       };
-    case type.GET_PHASE_REQUEST:
+    case type.GET_PLAN_REQUEST:
       return {
         ...state,
         pending: true,
       };
-    case type.GET_PHASE_SUCCESS:
+    case type.GET_PLAN_SUCCESS:
       return {
         ...state,
         pending: false,
@@ -65,18 +65,18 @@ const reducers = (state = initialState, action) => {
           ? action.payload.phases
           : [],
       };
-    case type.GET_PHASE_FAILURE:
+    case type.GET_PLAN_FAILURE:
       return {
         ...state,
         pending: false,
         error: action.error,
       };
-    case type.DELETE_PHASE_REQUEST:
+    case type.DELETE_PLAN_REQUEST:
       return {
         ...state,
         pending: true,
       };
-    case type.DELETE_PHASE_SUCCESS:
+    case type.DELETE_PLAN_SUCCESS:
       return {
         ...state,
         pending: false,
@@ -85,24 +85,24 @@ const reducers = (state = initialState, action) => {
         sequenceObjects: [],
         selectedObjects: [],
       };
-    case type.DELETE_PHASE_FAILURE:
+    case type.DELETE_PLAN_FAILURE:
       return {
         ...state,
         pending: false,
         error: action.error,
       };
-    case type.UPDATE_PHASE_REQUEST:
+    case type.UPDATE_PLAN_REQUEST:
       return {
         ...state,
         pending: true,
       };
-    case type.UPDATE_PHASE_SUCCESS:
+    case type.UPDATE_PLAN_SUCCESS:
       return {
         ...state,
         pending: false,
         phases: [...action.payload.phases],
       };
-    case type.UPDATE_PHASE_FAILURE:
+    case type.UPDATE_PLAN_FAILURE:
       return {
         ...state,
         pending: false,

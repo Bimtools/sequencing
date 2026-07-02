@@ -1,77 +1,77 @@
 import * as actionType from './actionTypes'
 
-export function CreatePhaseRequest(payload){
+export function CreatePlanRequest(payload){
     return{
-        type:actionType.CREATE_PHASE_REQUEST,
+        type:actionType.CREATE_PLAN_REQUEST,
         payload:payload
     }
 }
-export function CreatePhaseSuccess(payload){
+export function CreatePlanSuccess(payload){
     return{
-        type:actionType.CREATE_PHASE_SUCCESS,
+        type:actionType.CREATE_PLAN_SUCCESS,
         payload:payload
     }
 }
-export function CreatePhaseFailure(payload){
+export function CreatePlanFailure(payload){
     return{
-        type:actionType.CREATE_PHASE_FAILURE,
-        payload:payload
-    }
-}
-
-export function UpdatePhaseRequest(payload){
-    return{
-        type:actionType.UPDATE_PHASE_REQUEST,
-        payload:payload
-    }
-}
-export function UpdatePhaseSuccess(payload){
-    return{
-        type:actionType.UPDATE_PHASE_SUCCESS,
-        payload:payload
-    }
-}
-export function UpdatePhaseFailure(payload){
-    return{
-        type:actionType.UPDATE_PHASE_FAILURE,
+        type:actionType.CREATE_PLAN_FAILURE,
         payload:payload
     }
 }
 
-export function GetPhaseRequest(payload){
+export function UpdatePlanRequest(payload){
     return{
-        type:actionType.GET_PHASE_REQUEST,
+        type:actionType.UPDATE_PLAN_REQUEST,
         payload:payload
     }
 }
-export function GetPhaseSuccess(payload){
+export function UpdatePlanSuccess(payload){
     return{
-        type:actionType.GET_PHASE_SUCCESS,
+        type:actionType.UPDATE_PLAN_SUCCESS,
         payload:payload
     }
 }
-export function GetPhaseFailure(payload){
+export function UpdatePlanFailure(payload){
     return{
-        type:actionType.GET_PHASE_FAILURE,
+        type:actionType.UPDATE_PLAN_FAILURE,
         payload:payload
     }
 }
 
-export function DeletePhaseRequest(payload){
+export function GetPlanRequest(payload){
     return{
-        type:actionType.DELETE_PHASE_REQUEST,
+        type:actionType.GET_PLAN_REQUEST,
         payload:payload
     }
 }
-export function DeletePhaseSuccess(payload){
+export function GetPlanSuccess(payload){
     return{
-        type:actionType.DELETE_PHASE_SUCCESS,
+        type:actionType.GET_PLAN_SUCCESS,
         payload:payload
     }
 }
-export function DeletePhaseFailure(payload){
+export function GetPlanFailure(payload){
     return{
-        type:actionType.DELETE_PHASE_FAILURE,
+        type:actionType.GET_PLAN_FAILURE,
+        payload:payload
+    }
+}
+
+export function DeletePlanRequest(payload){
+    return{
+        type:actionType.DELETE_PLAN_REQUEST,
+        payload:payload
+    }
+}
+export function DeletePlanSuccess(payload){
+    return{
+        type:actionType.DELETE_PLAN_SUCCESS,
+        payload:payload
+    }
+}
+export function DeletePlanFailure(payload){
+    return{
+        type:actionType.DELETE_PLAN_FAILURE,
         payload:payload
     }
 }
