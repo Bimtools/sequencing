@@ -37,17 +37,16 @@ import {
 import {
   DeletePlanRequest,
   UpdatePlanRequest,
-  GetSequenceRequest,
+  GetSubPlansRequest,
 } from "../store/sequence/action";
 
-import CreateSubPlanModal from "./CreateSubPlanModal";
+import SubPlanModal from "./SubPlanModal";
 import SubPlanCollapse from "./SubPlanCollapse";
 import SortableHeader from "./SortableHeader";
 
 const Main = () => {
   const dispatch = useDispatch();
-
-  const plans = useSelector((state) => state.sequence.phases);
+  const plans = useSelector((state) => state.sequence.plans);
   const loading = useSelector((state) => state.sequence.pending);
   const rootCommentId = useSelector((state) => state.sequence.rootCommentId);
 
@@ -57,7 +56,7 @@ const Main = () => {
   const [isCreateSubPlanOpen, setIsCreateSubPlanOpen] = React.useState(false);
   const [planName, setPlanName] = React.useState("");
   const [selectedPlan, setSelectedPlan] = React.useState(null);
-  const [loadedPhaseIds, setLoadedPhaseIds] = React.useState([]);
+  const [loadedPlanIds, setLoadedPlanIds] = React.useState([]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -75,12 +74,12 @@ const Main = () => {
 
     if (oldIndex === -1 || newIndex === -1) return;
 
-    const newPhases = arrayMove(plans, oldIndex, newIndex);
+    const newPlans = arrayMove(plans, oldIndex, newIndex);
 
     dispatch(
       UpdatePlanRequest({
         commentId: rootCommentId,
-        phases: newPhases,
+        plans: newPlans,
       }),
     );
   };
@@ -104,7 +103,7 @@ const Main = () => {
       DeletePlanRequest({
         rootCommentId,
         folderId: plan.id,
-        phases: plans,
+        plans: plans,
       }),
     );
   };
@@ -112,14 +111,14 @@ const Main = () => {
   const handleModifyName = () => {
     if (!selectedPlan) return;
 
-    const newPhases = plans.map((x) =>
+    const newPlans = plans.map((x) =>
       x.id !== selectedPlan.id ? x : { ...x, name: planName },
     );
 
     dispatch(
       UpdatePlanRequest({
         commentId: rootCommentId,
-        phases: newPhases,
+        plans: newPlans,
       }),
     );
 
@@ -129,18 +128,18 @@ const Main = () => {
     form.resetFields();
   };
 
-  const handlePhaseCollapseChange = (activeKeys) => {
+  const handlePlanCollapseChange = (activeKeys) => {
     const keys = Array.isArray(activeKeys) ? activeKeys : [activeKeys];
     console.log("Active keys:", keys);
-    keys.forEach((phaseId) => {
-      if (!loadedPhaseIds.includes(phaseId)) {
+    keys.forEach((planId) => {
+      if (!loadedPlanIds.includes(planId)) {
+        console.log("Loading sub plans for plan:", planId);
         dispatch(
-          GetSequenceRequest({
-            folderId: phaseId,
+          GetSubPlansRequest({
+            folderId: planId,
           }),
         );
-
-        setLoadedPhaseIds((prev) => [...prev, phaseId]);
+        setLoadedPlanIds((prev) => [...prev, planId]);
       }
     });
   };
@@ -167,7 +166,7 @@ const Main = () => {
 
   return (
     <>
-      <CreateSubPlanModal
+      <SubPlanModal
         title="Create Sub Plan"
         buttonName="Create"
         plan={selectedPlan}
@@ -230,7 +229,7 @@ const Main = () => {
               loading={loading}
               size="small"
               items={collapseItems}
-              onChange={handlePhaseCollapseChange}
+              onChange={handlePlanCollapseChange}
               style={{
                 borderRadius: 0,
               }}

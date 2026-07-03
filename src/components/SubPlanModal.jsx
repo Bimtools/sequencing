@@ -3,11 +3,11 @@ import { Modal, Form, Input, Button } from "antd";
 import { Colorpicker } from "antd-colorpicker";
 import { useDispatch, useSelector } from "react-redux";
 import {
-  CreateSequenceRequest,
-  UpdateCommentRequest,
+  CreateSubPlanRequest,
+  UpdateSubPlanRequest,
 } from "../store/sequence/action";
 
-const CreateSubPlanModal = ({
+const SubPlanModal = ({
   title,
   buttonName,
   plan,
@@ -18,8 +18,10 @@ const CreateSubPlanModal = ({
   const dispatch = useDispatch();
   const [form] = Form.useForm();
 
-  const subPlans = useSelector((state) => state.sequence.sequences);
-  const sequenceObjects = useSelector((state) => state.sequence.sequenceObjects);
+  const subPlans = useSelector((state) => state.sequence.subPlans);
+  const sequenceObjects = useSelector(
+    (state) => state.sequence.sequenceObjects,
+  );
   const phaseCommentId = useSelector((state) => state.sequence.phaseCommentId);
 
   const [colorDialog, setColorDialog] = useState(false);
@@ -73,20 +75,19 @@ const CreateSubPlanModal = ({
       );
 
       dispatch(
-        UpdateCommentRequest({
-          commentId: phaseCommentId,
-          sequences: newSubPlans,
+        UpdateSubPlanRequest({
+          subPlans: newSubPlans,
         }),
       );
     } else {
       dispatch(
-        CreateSequenceRequest({
+        CreateSubPlanRequest({
           name: values.planName,
           color: color.rgb,
           check: false,
           phaseFolderId: plan.id,
           phaseCommentId,
-          sequences: subPlans,
+          subPlans: subPlans,
           sequenceObjects,
         }),
       );
@@ -172,4 +173,4 @@ const CreateSubPlanModal = ({
   );
 };
 
-export default CreateSubPlanModal;
+export default SubPlanModal;

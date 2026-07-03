@@ -8,16 +8,18 @@ import {
   fork,
 } from "redux-saga/effects";
 import {
-  CreateSequenceSuccess,
-  CreateSequenceFailure,
-  DeleteSequenceFailure,
-  DeleteSequenceSuccess,
+  GetSubPlansSuccess,
+  GetSubPlansFailure,
+  CreateSubPlanSuccess,
+  CreateSubPlanFailure,
+  DeleteSubPlanFailure,
+  DeleteSubPlanSuccess,
+  UpdateSubPlanSuccess,
+  UpdateSubPlanFailure,
   UpdateCommentSuccess,
   UpdateCommentFailure,
   SetObjectsSuccess,
   SetObjectsFailure,
-  GetSequenceSuccess,
-  GetSequenceFailure,
   GetSourceSequenceSuccess,
   GetSourceSequenceFailure,
   GetPlanSuccess,
@@ -45,25 +47,25 @@ function* getPlansSaga(action) {
       yield put(
         GetPlanSuccess({
           folderId: insertFolderResponse.data.id,
-          phases: [],
+          plans: [],
         }),
       );
     } else {
       //Get comment in the sequence folder
       const getCommentUrl = `/comments?objectId=${folders[0].id}&objectType=FOLDER`;
       const commentResponse = yield call(instance.get, getCommentUrl);
-      const phases = JSON.parse(
+      const plans = JSON.parse(
         commentResponse.data.length > 0
           ? commentResponse.data[0].description
           : "[]",
       );
-      console.log(commentResponse.data);
+      console.log(plans);
       yield put(
         GetPlanSuccess({
           rootCommentId:
             commentResponse.data.length > 0 ? commentResponse.data[0].id : null,
           folderId: folders[0].id,
-          phases: phases,
+          plans: plans,
         }),
       );
     }
@@ -85,22 +87,22 @@ function* createPlanSaga(action) {
     insertFolderBody,
   );
   try {
-    const newPhase = {
+    const newPlan = {
       id: insertFolderResponse.data.id,
       name: action.payload.name,
     };
-    const newPhases = [...action.payload.phases, newPhase];
-    console.log(newPhases);
+    const newPlans = [...action.payload.plans, newPlan];
+    console.log(newPlans);
     if (action.payload.rootCommentId) {
       //Update comment with new phase list
       const updateCommentUrl = `/comments/${action.payload.rootCommentId}`;
       yield call(instance.patch, updateCommentUrl, {
-        description: JSON.stringify(newPhases),
+        description: JSON.stringify(newPlans),
       });
       yield put(
         CreatePlanSuccess({
           rootCommentId: action.payload.rootCommentId,
-          phases: [...action.payload.phases, newPhase],
+          plans: [...action.payload.plans, newPlan],
         }),
       );
     } else {
@@ -109,7 +111,7 @@ function* createPlanSaga(action) {
       const createCommentBody = {
         objectId: action.payload.rootFolderId,
         objectType: "FOLDER",
-        description: JSON.stringify(newPhases),
+        description: JSON.stringify(newPlans),
       };
       console.log(createCommentBody);
       const responseInsertComment = yield call(
@@ -120,7 +122,7 @@ function* createPlanSaga(action) {
       yield put(
         CreatePlanSuccess({
           rootCommentId: responseInsertComment.data.id,
-          phases: [...action.payload.phases, newPhase],
+          plans: [...action.payload.plans, newPlan],
         }),
       );
     }
@@ -134,11 +136,11 @@ function* updatePlanSaga(action) {
     //Update comment with new sequence list
     const updateCommentUrl = `/comments/${action.payload.commentId}`;
     yield call(instance.patch, updateCommentUrl, {
-      description: JSON.stringify(action.payload.phases),
+      description: JSON.stringify(action.payload.plans),
     });
     yield put(
       UpdatePlanSuccess({
-        phases: [...action.payload.phases],
+        plans: [...action.payload.plans],
       }),
     );
   } catch (error) {
@@ -159,18 +161,18 @@ function* deletePlanSaga(action) {
       deleteStatus = error.message.includes("404");
     }
     if (deleteStatus) {
-      const newPhases = action.payload.phases.filter(
+      const newPlans = action.payload.plans.filter(
         (x) => x.id !== action.payload.folderId,
       );
 
       //Update comment with new sequence list
       const updateCommentUrl = `/comments/${action.payload.rootCommentId}`;
       yield call(instance.patch, updateCommentUrl, {
-        description: JSON.stringify(newPhases),
+        description: JSON.stringify(newPlans),
       });
       yield put(
         DeletePlanSuccess({
-          phases: [...newPhases],
+          plans: [...newPlans],
         }),
       );
     } else {
@@ -181,23 +183,118 @@ function* deletePlanSaga(action) {
     yield put(DeletePlanFailure(error.message));
   }
 }
-function* getSequenceSaga(action) {
+function* createSubPlanSaga(action) {
+  const insertFolderUrl = `/folders`;
+  console.log(action.payload);
+  const insertFolderBody = {
+    name: action.payload.name,
+    parentId: action.payload.phaseFolderId,
+  };
+  const insertFolderResponse = yield call(
+    instance.post,
+    insertFolderUrl,
+    insertFolderBody,
+  );
+  try {
+    const newSubPlan = {
+      id: insertFolderResponse.data.id,
+      planId: action.payload.phaseFolderId,
+      name: action.payload.name,
+      color: action.payload.color,
+      check: action.payload.check,
+    };
+    const prevSubPlans = action.payload.subPlans.filter(
+      (x) => x && x.planId === newSubPlan.planId,
+    );
+    const newSubPlans = [...prevSubPlans, newSubPlan];
+    console.log(newSubPlans);
+    if (action.payload.phaseCommentId) {
+      //Update comment with new sequence list
+      const updateCommentUrl = `/comments/${action.payload.phaseCommentId}`;
+      yield call(instance.patch, updateCommentUrl, {
+        description: JSON.stringify(newSubPlans),
+      });
+      yield put(
+        CreateSubPlanSuccess({
+          phaseCommentId: action.payload.phaseCommentId,
+          subPlans: [...action.payload.subPlans, newSubPlan],
+          sequenceObjects: [
+            ...action.payload.sequenceObjects,
+            {
+              folderId: newSubPlan.id,
+              objectIds: [],
+            },
+          ],
+        }),
+      );
+    } else {
+      //Create comment with sequence list
+      const createCommentUrl = `/comments`;
+      const createCommentBody = {
+        objectId: action.payload.phaseFolderId,
+        objectType: "FOLDER",
+        description: JSON.stringify(newSubPlans),
+      };
+      const responseInsertComment = yield call(
+        instance.post,
+        createCommentUrl,
+        createCommentBody,
+      );
+      yield put(
+        CreateSubPlanSuccess({
+          phaseCommentId: responseInsertComment.data.id,
+          subPlans: [...action.payload.subPlans, newSubPlan],
+          sequenceObjects: [
+            ...action.payload.sequenceObjects,
+            {
+              folderId: newSubPlan.id,
+              objectIds: [],
+            },
+          ],
+        }),
+      );
+    }
+  } catch (error) {
+    console.error("Error creating folder:", error);
+    yield put(CreateSubPlanFailure(error.message));
+  }
+}
+function* updateSubPlanSaga(action) {
+  try {
+    //Get comment in the folder
+    const getCommentUrl = `/comments?objectId=${action.payload.subPlans[0].planId}&objectType=FOLDER`;
+    const commentResponse = yield call(instance.get, getCommentUrl);
+    const comments = commentResponse.data;
+    //Update comment with new sequence list
+    const updateCommentUrl = `/comments/${comments[0].id}`;
+    yield call(instance.patch, updateCommentUrl, {
+      description: JSON.stringify(action.payload.subPlans),
+    });
+    yield put(
+      UpdateSubPlanSuccess({
+        subPlans: [...action.payload.subPlans],
+      }),
+    );
+  } catch (error) {
+    console.error("Error updating comment:", error);
+    yield put(UpdateSubPlanFailure(error.message));
+  }
+}
+function* getSubPlansSaga(action) {
   try {
     //Get comment in the sequence folder
     const getCommentUrl = `/comments?objectId=${action.payload.folderId}&objectType=FOLDER`;
     const commentResponse = yield call(instance.get, getCommentUrl);
 
-    const sequences = JSON.parse(
+    const subPlans = JSON.parse(
       commentResponse.data.length > 0
         ? commentResponse.data[0].description
         : "[]",
     );
-
-    console.log(commentResponse.data);
-
+    console.log("subPlans", subPlans);
     const sequenceObjects = [];
-    for (const sequence of sequences) {
-      const getSequenceCommentUrl = `/comments?objectId=${sequence.id}&objectType=FOLDER`;
+    for (const subPlan of subPlans) {
+      const getSequenceCommentUrl = `/comments?objectId=${subPlan.id}&objectType=FOLDER`;
       const sequenceCommentResponse = yield call(
         instance.get,
         getSequenceCommentUrl,
@@ -216,17 +313,61 @@ function* getSequenceSaga(action) {
     }
     console.log("sequenceObjects", sequenceObjects);
     yield put(
-      GetSequenceSuccess({
+      GetSubPlansSuccess({
         phaseCommentId:
           commentResponse.data.length > 0 ? commentResponse.data[0].id : null,
         phaseFolderId: action.payload.folderId,
-        sequences: sequences,
+        subPlans: subPlans,
         sequenceObjects: sequenceObjects,
       }),
     );
   } catch (error) {
     console.error("Error fetching folder:", error);
-    yield put(GetSequenceFailure(error.message));
+    yield put(GetSubPlansFailure(error.message));
+  }
+}
+function* deleteSubPlanSaga(action) {
+  try {
+    console.log("deleteSubPlanSaga", action.payload);
+    //Delete folder
+    const deleteFolderUrl = `/folders/${action.payload.subPlanId}`;
+    var deleteStatus = false;
+    try {
+      const deleteFolderResponse = yield call(instance.delete, deleteFolderUrl);
+      console.log("deleteFolderResponse", deleteFolderResponse.status);
+      deleteStatus = deleteFolderResponse.status === 204;
+    } catch (error) {
+      deleteStatus = error.message.includes("404");
+    }
+    if (deleteStatus) {
+      const newSubPlans = action.payload.subPlans.filter(
+        (x) => x && x.id !== action.payload.subPlanId,
+      );
+      const newSequenceObjects = action.payload.sequenceObjects.filter(
+        (x) => x && x.folderId !== action.payload.subPlanId,
+      );
+      //Get comment in the folder
+      const getCommentUrl = `/comments?objectId=${action.payload.planId}&objectType=FOLDER`;
+      const commentResponse = yield call(instance.get, getCommentUrl);
+      const comments = commentResponse.data;
+
+      //Update comment with new sequence list
+      const updateCommentUrl = `/comments/${comments[0].id}`;
+      yield call(instance.patch, updateCommentUrl, {
+        description: JSON.stringify(newSubPlans),
+      });
+      yield put(
+        DeleteSubPlanSuccess({
+          subPlans: [...newSubPlans],
+          sequenceObjects: [...newSequenceObjects],
+        }),
+      );
+    } else {
+      yield put(DeleteSubPlanFailure("Failed to delete sub plan"));
+    }
+  } catch (error) {
+    console.error("Error updating comment:", error);
+    yield put(DeleteSubPlanFailure(error.message));
   }
 }
 function* getSourceSequenceSaga(action) {
@@ -249,79 +390,6 @@ function* getSourceSequenceSaga(action) {
   } catch (error) {
     console.error("Error fetching folder:", error);
     yield put(GetSourceSequenceFailure(error.message));
-  }
-}
-function* createSequenceSaga(action) {
-  const insertFolderUrl = `/folders`;
-  console.log(action.payload);
-  const insertFolderBody = {
-    name: action.payload.name,
-    parentId: action.payload.phaseFolderId,
-  };
-  const insertFolderResponse = yield call(
-    instance.post,
-    insertFolderUrl,
-    insertFolderBody,
-  );
-  try {
-    const newSequence = {
-      id: insertFolderResponse.data.id,
-      planId: action.payload.phaseFolderId,
-      name: action.payload.name,
-      color: action.payload.color,
-      check: action.payload.check
-    };
-    const newSequences = [...action.payload.sequences, newSequence];
-    console.log(newSequences);
-    if (action.payload.phaseCommentId) {
-      //Update comment with new sequence list
-      const updateCommentUrl = `/comments/${action.payload.phaseCommentId}`;
-      yield call(instance.patch, updateCommentUrl, {
-        description: JSON.stringify(newSequences),
-      });
-      yield put(
-        CreateSequenceSuccess({
-          phaseCommentId: action.payload.phaseCommentId,
-          sequences: [...action.payload.sequences, newSequence],
-          sequenceObjects: [
-            ...action.payload.sequenceObjects,
-            {
-              folderId: newSequence.id,
-              objectIds: [],
-            },
-          ],
-        }),
-      );
-    } else {
-      //Create comment with sequence list
-      const createCommentUrl = `/comments`;
-      const createCommentBody = {
-        objectId: action.payload.phaseFolderId,
-        objectType: "FOLDER",
-        description: JSON.stringify(newSequences),
-      };
-      const responseInsertComment = yield call(
-        instance.post,
-        createCommentUrl,
-        createCommentBody,
-      );
-      yield put(
-        CreateSequenceSuccess({
-          phaseCommentId: responseInsertComment.data.id,
-          sequences: [...action.payload.sequences, newSequence],
-          sequenceObjects: [
-            ...action.payload.sequenceObjects,
-            {
-              folderId: newSequence.id,
-              objectIds: [],
-            },
-          ],
-        }),
-      );
-    }
-  } catch (error) {
-    console.error("Error creating folder:", error);
-    yield put(CreateSequenceFailure(error.message));
   }
 }
 function* copySequenceSaga(action) {
@@ -353,7 +421,12 @@ function* copySequenceSaga(action) {
       yield call(instance.patch, updateCommentUrl, {
         description: JSON.stringify(updatedSequences),
       });
-      yield put(UpdateCommentSuccess({ folders: updatedSequences, phaseCommentId: action.payload.phaseCommentId }));
+      yield put(
+        UpdateCommentSuccess({
+          folders: updatedSequences,
+          phaseCommentId: action.payload.phaseCommentId,
+        }),
+      );
     } else {
       //Create comment with sequence list
       const createCommentUrl = `/comments`;
@@ -368,7 +441,12 @@ function* copySequenceSaga(action) {
         createCommentBody,
       );
 
-      yield put(UpdateCommentSuccess({ folders: updatedSequences, phaseCommentId: responseInsertComment.data.id }));
+      yield put(
+        UpdateCommentSuccess({
+          folders: updatedSequences,
+          phaseCommentId: responseInsertComment.data.id,
+        }),
+      );
     }
   } catch (error) {
     console.error("Error updating comment:", error);
@@ -378,16 +456,18 @@ function* copySequenceSaga(action) {
 }
 function* updateCommentSaga(action) {
   try {
-    
+    //Get comment in the folder
+    const getCommentUrl = `/comments?objectId=${action.payload.folderId}&objectType=FOLDER`;
+    const commentResponse = yield call(instance.get, getCommentUrl);
+    const comments = commentResponse.data;
     //Update comment with new sequence list
-    const updateCommentUrl = `/comments/${action.payload.commentId}`;
+    const updateCommentUrl = `/comments/${comments[0].id}`;
     yield call(instance.patch, updateCommentUrl, {
-      description: JSON.stringify(action.payload.sequences),
+      description: JSON.stringify(action.payload.subPlans),
     });
     yield put(
       UpdateCommentSuccess({
-        phaseCommentId: action.payload.commentId,
-        folders: [...action.payload.sequences],
+        subPlans: [...action.payload.subPlans],
       }),
     );
   } catch (error) {
@@ -395,52 +475,13 @@ function* updateCommentSaga(action) {
     yield put(UpdateCommentFailure(error.message));
   }
 }
-function* deleteSequenceSaga(action) {
-  try {
-    //Delete folder
-    const deleteFolderUrl = `/folders/${action.payload.folderId}`;
-    var deleteStatus = false;
-    try {
-      const deleteFolderResponse = yield call(instance.delete, deleteFolderUrl);
-      console.log("deleteFolderResponse", deleteFolderResponse.status);
-      deleteStatus = deleteFolderResponse.status === 204;
-    } catch (error) {
-      deleteStatus = error.message.includes("404");
-    }
-    if (deleteStatus) {
-      const newSequences = action.payload.sequences.filter(
-        (x) =>x && x.id !== action.payload.folderId,
-      );
-      const newSequenceObjects = action.payload.sequenceObjects.filter(
-        (x) => x && x.folderId !== action.payload.folderId,
-      );
-
-      //Update comment with new sequence list
-      const updateCommentUrl = `/comments/${action.payload.phaseCommentId}`;
-      yield call(instance.patch, updateCommentUrl, {
-        description: JSON.stringify(newSequences),
-      });
-      yield put(
-        DeleteSequenceSuccess({
-          sequences: [...newSequences],
-          sequenceObjects: [...newSequenceObjects],
-        }),
-      );
-    } else {
-      yield put(DeleteSequenceFailure("Failed to delete sequence"));
-    }
-  } catch (error) {
-    console.error("Error updating comment:", error);
-    yield put(DeleteSequenceFailure(error.message));
-  }
-}
 function* setObjectsSaga(action) {
   try {
     console.log("Set objects saga", action.payload);
-    const folderId = action.payload.folderId;
-    console.log(folderId);
+    const subPlanId = action.payload.subPlanId;
+    console.log(subPlanId);
     //Get all comments
-    const getCommentUrl = `/comments?objectId=${folderId}&objectType=FOLDER`;
+    const getCommentUrl = `/comments?objectId=${subPlanId}&objectType=FOLDER`;
     const commentResponse = yield call(instance.get, getCommentUrl);
 
     for (const comment of commentResponse.data) {
@@ -460,7 +501,7 @@ function* setObjectsSaga(action) {
       startIndex += step;
       chunkIndex++;
       const createCommentBody = {
-        objectId: folderId,
+        objectId: subPlanId,
         objectType: "FOLDER",
         description: chunkIndex + "tuan" + chunk,
       };
@@ -482,10 +523,11 @@ function* sequenceSaga() {
   yield takeEvery("CREATE_PLAN_REQUEST", createPlanSaga);
   yield takeEvery("UPDATE_PLAN_REQUEST", updatePlanSaga);
   yield takeEvery("DELETE_PLAN_REQUEST", deletePlanSaga);
-  yield takeEvery("DELETE_SEQUENCE_REQUEST", deleteSequenceSaga);
+  yield takeEvery("GET_SUBPLAN_REQUEST", getSubPlansSaga);
+  yield takeEvery("UPDATE_SUBPLAN_REQUEST", updateSubPlanSaga);
+  yield takeEvery("CREATE_SUBPLAN_REQUEST", createSubPlanSaga);
+  yield takeEvery("DELETE_SUBPLAN_REQUEST", deleteSubPlanSaga);
   yield takeEvery("UPDATE_COMMENT_REQUEST", updateCommentSaga);
-  yield takeEvery("CREATE_SEQUENCE_REQUEST", createSequenceSaga);
-  yield takeEvery("GET_SEQUENCE_REQUEST", getSequenceSaga);
   yield takeEvery("GET_SOURCE_SEQUENCE_REQUEST", getSourceSequenceSaga);
   yield takeEvery("COPY_SEQUENCE_REQUEST", copySequenceSaga);
   yield takeEvery("SET_OBJECTS_REQUEST", setObjectsSaga);

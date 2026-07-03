@@ -5,8 +5,8 @@ const initialState = {
   rootCommentId: null,
   phaseFolderId: null,
   phaseCommentId: null,
-  phases: [],
-  sequences: [],
+  plans: [],
+  subPlans: [],
   sequencesToBeCopied: [],
   sequenceObjects: [],
   selectedObjects: [],
@@ -21,11 +21,11 @@ const reducers = (state = initialState, action) => {
     case type.UPDATE_PLAN_REQUEST:
     case type.GET_PLAN_REQUEST:
     case type.DELETE_PLAN_REQUEST:
-    case type.CREATE_SEQUENCE_REQUEST:
-    case type.UPDATE_SEQUENCE_REQUEST:
-    case type.GET_SEQUENCE_REQUEST:
+    case type.CREATE_SUBPLAN_REQUEST:
+    case type.UPDATE_SUBPLAN_REQUEST:
+    case type.GET_SUBPLAN_REQUEST:
+    case type.DELETE_SUBPLAN_REQUEST:
     case type.GET_SOURCE_SEQUENCE_REQUEST:
-    case type.DELETE_SEQUENCE_REQUEST:
     case type.UPDATE_COMMENT_REQUEST:
     case type.SET_OBJECTS_REQUEST:
     case type.SELECT_OBJECTS_REQUEST:
@@ -40,8 +40,8 @@ const reducers = (state = initialState, action) => {
         ...state,
         pending: false,
         rootCommentId: action.payload.rootCommentId,
-        phases: Array.isArray(action.payload.phases)
-          ? [...action.payload.phases]
+        plans: Array.isArray(action.payload.plans)
+          ? [...action.payload.plans]
           : [],
       };
 
@@ -49,9 +49,9 @@ const reducers = (state = initialState, action) => {
       return {
         ...state,
         pending: false,
-        phases: Array.isArray(action.payload.phases)
-          ? [...action.payload.phases]
-          : state.phases,
+        plans: Array.isArray(action.payload.plans)
+          ? [...action.payload.plans]
+          : state.plans,
       };
 
     case type.GET_PLAN_SUCCESS:
@@ -60,8 +60,8 @@ const reducers = (state = initialState, action) => {
         pending: false,
         rootCommentId: action.payload.rootCommentId,
         rootFolderId: action.payload.folderId,
-        phases: Array.isArray(action.payload.phases)
-          ? action.payload.phases
+        plans: Array.isArray(action.payload.plans)
+          ? [...action.payload.plans]
           : [],
       };
 
@@ -69,49 +69,63 @@ const reducers = (state = initialState, action) => {
       return {
         ...state,
         pending: false,
-        phases: Array.isArray(action.payload.phases)
-          ? [...action.payload.phases]
+        plans: Array.isArray(action.payload.plans)
+          ? [...action.payload.plans]
           : [],
-        sequences: [],
+        subPlans: [],
         sequenceObjects: [],
         selectedObjects: [],
         selectedGroup: null,
       };
 
-    case type.CREATE_SEQUENCE_SUCCESS:
+    case type.CREATE_SUBPLAN_SUCCESS:
       return {
         ...state,
         pending: false,
         phaseCommentId: action.payload.phaseCommentId,
-        sequences: Array.isArray(action.payload.sequences)
-          ? [...action.payload.sequences]
-          : [],
+        subPlans: Array.isArray(action.payload.subPlans)
+          ? [...action.payload.subPlans]
+          : state.subPlans,
         sequenceObjects: Array.isArray(action.payload.sequenceObjects)
           ? [...action.payload.sequenceObjects]
           : [],
       };
 
-    case type.UPDATE_SEQUENCE_SUCCESS:
+    case type.UPDATE_SUBPLAN_SUCCESS:
       return {
         ...state,
         pending: false,
-        sequences: Array.isArray(action.payload.sequences)
-          ? [...action.payload.sequences]
-          : state.sequences,
+        subPlans: Array.isArray(action.payload.subPlans)
+          ? [...action.payload.subPlans]
+          : state.subPlans,
       };
 
-    case type.GET_SEQUENCE_SUCCESS:
+    case type.GET_SUBPLAN_SUCCESS:
+      const updatedSubPlans = [
+        ...new Map(
+          [...state.subPlans, ...action.payload.subPlans].map(
+            (x) => x && [x.id, x],
+          ),
+        ).values(),
+      ];
+
+      const updatedObjects = [
+        ...new Map(
+          [...state.sequenceObjects, ...action.payload.sequenceObjects]
+            .filter(Boolean)
+            .map((x) => [x.subPlanId, x]),
+        ).values(),
+      ];
+
       return {
         ...state,
         pending: false,
         phaseFolderId: action.payload.phaseFolderId,
         phaseCommentId: action.payload.phaseCommentId,
-        sequences: Array.isArray(action.payload.sequences)
-          ? [...state.sequences, ...action.payload.sequences]
-          : [...state.sequences],
-        sequenceObjects: Array.isArray(action.payload.sequenceObjects)
-          ? [...action.payload.sequenceObjects]
-          : [],
+        subPlans: Array.isArray(updatedSubPlans)
+          ? updatedSubPlans
+          : state.subPlans,
+        sequenceObjects: Array.isArray(updatedObjects) ? updatedObjects : [],
         selectedObjects: [],
         selectedGroup: null,
       };
@@ -125,13 +139,13 @@ const reducers = (state = initialState, action) => {
           : [],
       };
 
-    case type.DELETE_SEQUENCE_SUCCESS:
+    case type.DELETE_SUBPLAN_SUCCESS:
       return {
         ...state,
         pending: false,
-        sequences: Array.isArray(action.payload.sequences)
-          ? [...action.payload.sequences]
-          : [],
+        subPlans: Array.isArray(action.payload.subPlans)
+          ? [...action.payload.subPlans]
+          : state.subPlans,
         sequenceObjects: Array.isArray(action.payload.sequenceObjects)
           ? [...action.payload.sequenceObjects]
           : [],
@@ -145,12 +159,12 @@ const reducers = (state = initialState, action) => {
         pending: false,
         rootCommentId: action.payload.rootCommentId ?? state.rootCommentId,
         phaseCommentId: action.payload.phaseCommentId ?? state.phaseCommentId,
-        phases: Array.isArray(action.payload.phases)
-          ? [...action.payload.phases]
-          : state.phases,
-        sequences: Array.isArray(action.payload.sequences)
-          ? [...action.payload.sequences]
-          : state.sequences,
+        plans: Array.isArray(action.payload.plans)
+          ? [...action.payload.plans]
+          : state.plans,
+        subPlans: Array.isArray(action.payload.subPlans)
+          ? [...action.payload.subPlans]
+          : state.subPlans,
         sequenceObjects: Array.isArray(action.payload.sequenceObjects)
           ? [...action.payload.sequenceObjects]
           : state.sequenceObjects,
@@ -184,11 +198,11 @@ const reducers = (state = initialState, action) => {
     case type.UPDATE_PLAN_FAILURE:
     case type.GET_PLAN_FAILURE:
     case type.DELETE_PLAN_FAILURE:
-    case type.CREATE_SEQUENCE_FAILURE:
-    case type.UPDATE_SEQUENCE_FAILURE:
-    case type.GET_SEQUENCE_FAILURE:
+    case type.CREATE_SUBPLAN_FAILURE:
+    case type.UPDATE_SUBPLAN_FAILURE:
+    case type.GET_SUBPLAN_FAILURE:
+    case type.DELETE_SUBPLAN_FAILURE:
     case type.GET_SOURCE_SEQUENCE_FAILURE:
-    case type.DELETE_SEQUENCE_FAILURE:
     case type.UPDATE_COMMENT_FAILURE:
     case type.SET_OBJECTS_FAILURE:
     case type.SELECT_OBJECTS_FAILURE:

@@ -76,59 +76,77 @@ export function DeletePlanFailure(payload){
     }
 }
 
-export function CreateSequenceRequest(payload){
+export function CreateSubPlanRequest(payload){
     return{
-        type:actionType.CREATE_SEQUENCE_REQUEST,
+        type:actionType.CREATE_SUBPLAN_REQUEST,
         payload:payload
     }
 }
-export function CreateSequenceSuccess(payload){
+export function CreateSubPlanSuccess(payload){
     return{
-        type:actionType.CREATE_SEQUENCE_SUCCESS,
+        type:actionType.CREATE_SUBPLAN_SUCCESS,
         payload:payload
     }
 }
-export function CreateSequenceFailure(payload){
+export function CreateSubPlanFailure(payload){
     return{
-        type:actionType.CREATE_SEQUENCE_FAILURE,
-        payload:payload
-    }
-}
-
-export function UpdateSequenceRequest(payload){
-    return{
-        type:actionType.UPDATE_SEQUENCE_REQUEST,
-        payload:payload
-    }
-}
-export function UpdateSequenceSuccess(payload){
-    return{
-        type:actionType.UPDATE_SEQUENCE_SUCCESS,
-        payload:payload
-    }
-}
-export function UpdateSequenceFailure(payload){
-    return{
-        type:actionType.UPDATE_SEQUENCE_FAILURE,
+        type:actionType.CREATE_SUBPLAN_FAILURE,
         payload:payload
     }
 }
 
-export function GetSequenceRequest(payload){
+export function UpdateSubPlanRequest(payload){
     return{
-        type:actionType.GET_SEQUENCE_REQUEST,
+        type:actionType.UPDATE_SUBPLAN_REQUEST,
         payload:payload
     }
 }
-export function GetSequenceSuccess(payload){
+export function UpdateSubPlanSuccess(payload){
     return{
-        type:actionType.GET_SEQUENCE_SUCCESS,
+        type:actionType.UPDATE_SUBPLAN_SUCCESS,
         payload:payload
     }
 }
-export function GetSequenceFailure(payload){
+export function UpdateSubPlanFailure(payload){
     return{
-        type:actionType.GET_SEQUENCE_FAILURE,
+        type:actionType.UPDATE_SUBPLAN_FAILURE,
+        payload:payload
+    }
+}
+
+export function GetSubPlansRequest(payload){
+    return{
+        type:actionType.GET_SUBPLAN_REQUEST,
+        payload:payload
+    }
+}
+export function GetSubPlansSuccess(payload){
+    return{
+        type:actionType.GET_SUBPLAN_SUCCESS,
+        payload:payload
+    }
+}
+export function GetSubPlansFailure(payload){
+    return{
+        type:actionType.GET_SUBPLAN_FAILURE,
+        payload:payload
+    }
+}
+export function DeleteSubPlanRequest(payload){
+    return{
+        type:actionType.DELETE_SUBPLAN_REQUEST,
+        payload:payload
+    }
+}
+export function DeleteSubPlanSuccess(payload){
+    return{
+        type:actionType.DELETE_SUBPLAN_SUCCESS,
+        payload:payload
+    }
+}
+export function DeleteSubPlanFailure(payload){
+    return{
+        type:actionType.DELETE_SUBPLAN_FAILURE,
         payload:payload
     }
 }
@@ -167,25 +185,6 @@ export function CopySequenceSuccess(payload){
 export function CopySequenceFailure(payload){
     return{
         type:actionType.COPY_SEQUENCE_FAILURE,
-        payload:payload
-    }
-}
-
-export function DeleteSequenceRequest(payload){
-    return{
-        type:actionType.DELETE_SEQUENCE_REQUEST,
-        payload:payload
-    }
-}
-export function DeleteSequenceSuccess(payload){
-    return{
-        type:actionType.DELETE_SEQUENCE_SUCCESS,
-        payload:payload
-    }
-}
-export function DeleteSequenceFailure(payload){
-    return{
-        type:actionType.DELETE_SEQUENCE_FAILURE,
         payload:payload
     }
 }

@@ -9,9 +9,16 @@ import {
   FolderAddOutlined,
   MenuOutlined,
   MoreOutlined,
+  PlusOutlined,
 } from "@ant-design/icons";
 
-const SortableHeader = ({ plan, onEdit, onDelete, onAddSubPlan }) => {
+const SortableHeader = ({
+  plan,
+  onEdit,
+  onDelete,
+  onAddSubPlan,
+  onAssignObject,
+}) => {
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
 
   const {
@@ -38,6 +45,23 @@ const SortableHeader = ({ plan, onEdit, onDelete, onAddSubPlan }) => {
   };
 
   const menuItems = [
+    onAssignObject && {
+      key: "addObject",
+      label: (
+        <Button
+          size="small"
+          type="text"
+          icon={<PlusOutlined />}
+          onClick={(e) => {
+            e.stopPropagation();
+            closeDropdown();
+            onAssignObject?.(plan);
+          }}
+        >
+          Assign Object
+        </Button>
+      ),
+    },
     onAddSubPlan && {
       key: "addSubPlan",
       label: (
