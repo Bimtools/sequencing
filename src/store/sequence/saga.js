@@ -266,6 +266,7 @@ function* createSequenceSaga(action) {
   try {
     const newSequence = {
       id: insertFolderResponse.data.id,
+      planId: action.payload.phaseFolderId,
       name: action.payload.name,
       color: action.payload.color,
       check: action.payload.check
@@ -377,6 +378,7 @@ function* copySequenceSaga(action) {
 }
 function* updateCommentSaga(action) {
   try {
+    
     //Update comment with new sequence list
     const updateCommentUrl = `/comments/${action.payload.commentId}`;
     yield call(instance.patch, updateCommentUrl, {
