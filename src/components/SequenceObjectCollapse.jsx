@@ -247,7 +247,7 @@ const SortableSubItem = React.memo(
             <strong>
               {item.asmPos ?? item.id}
               {item.positionCode != null && ` [${item.positionCode}]`}
-              {item.weight != null && ` (${item.weight} kg)`}
+              {item.weight != null && ` (${Number(Number(item.weight || 0).toFixed(2))} kg)`}
             </strong>
 
             <div style={{ flex: 1 }} />

@@ -397,7 +397,7 @@ export default function Simulation() {
             }}
           >
             <span>{`${current?.asmPos ?? ""} Grid: ${current?.positionCode}`}</span>
-            <span>{`${current?.weight ?? ""}kg`}</span>
+            <span>{`${Number(Number(current?.weight || 0).toFixed(2))}kg`}</span>
 
             <span>{current?.simulationDate || "-"}</span>
           </div>
