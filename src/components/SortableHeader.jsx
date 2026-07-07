@@ -2,6 +2,7 @@ import React from "react";
 import { Button, Dropdown, Popconfirm } from "antd";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useDispatch, useSelector } from "react-redux";
 
 import {
   DeleteOutlined,
@@ -10,6 +11,7 @@ import {
   MenuOutlined,
   MoreOutlined,
   PlusOutlined,
+  CopyOutlined,
 } from "@ant-design/icons";
 
 const SortableHeader = ({
@@ -18,7 +20,10 @@ const SortableHeader = ({
   onDelete,
   onAddSubPlan,
   onAssignObject,
+  onAutoAssign,
+  onCopySubPlan,
 }) => {
+  const phaseCommentId = useSelector((state) => state.sequence.phaseCommentId);
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
 
   const {
@@ -62,6 +67,23 @@ const SortableHeader = ({
         </Button>
       ),
     },
+    // onAutoAssign && {
+    //   key: "autoAddOff",
+    //   label: (
+    //     <Button
+    //       size="small"
+    //       type="text"
+    //       icon={<PlusOutlined />}
+    //       onClick={(e) => {
+    //         e.stopPropagation();
+    //         closeDropdown();
+    //         onAutoAssign?.(plan);
+    //       }}
+    //     >
+    //       Assign By Click
+    //     </Button>
+    //   ),
+    // },
     onAddSubPlan && {
       key: "addSubPlan",
       label: (
@@ -79,6 +101,24 @@ const SortableHeader = ({
         </Button>
       ),
     },
+    onCopySubPlan &&
+      phaseCommentId === null && {
+        key: "copySubPlan",
+        label: (
+          <Button
+            size="small"
+            type="text"
+            icon={<CopyOutlined />}
+            onClick={(e) => {
+              e.stopPropagation();
+              closeDropdown();
+              onCopySubPlan(plan);
+            }}
+          >
+            Copy Sub Plan
+          </Button>
+        ),
+      },
     {
       key: "editName",
       label: (

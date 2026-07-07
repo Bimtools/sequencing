@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+
 import {
   DndContext,
   closestCenter,
@@ -7,56 +8,45 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+
 import {
   SortableContext,
-  useSortable,
   arrayMove,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 
-import {
-  Collapse,
-  Button,
-  Dropdown,
-  Popconfirm,
-  Modal,
-  Form,
-  Input,
-  Spin,
-} from "antd";
-
-import {
-  DeleteOutlined,
-  EditOutlined,
-  FolderAddOutlined,
-  MenuOutlined,
-  MoreOutlined,
-} from "@ant-design/icons";
+import { Collapse, Button, Modal, Form, Input, Spin } from "antd";
 
 import {
   DeletePlanRequest,
   UpdatePlanRequest,
-  GetSubPlansRequest,
 } from "../store/sequence/action";
 
 import SubPlanModal from "./SubPlanModal";
 import SubPlanCollapse from "./SubPlanCollapse";
 import SortableHeader from "./SortableHeader";
+import CopySubPlanModal from "./CopySubPlanModal";
 
 const Main = () => {
   const dispatch = useDispatch();
-  const plans = useSelector((state) => state.sequence.plans);
+
+  const plans = useSelector((state) => state.sequence.plans || []);
   const loading = useSelector((state) => state.sequence.pending);
   const rootCommentId = useSelector((state) => state.sequence.rootCommentId);
 
+  const activeSimulationItem = useSelector(
+    (state) => state.sequence.activeSimulationItem,
+  );
+
   const [form] = Form.useForm();
 
-  const [isEditFormOpen, setIsEditFormOpen] = React.useState(false);
-  const [isCreateSubPlanOpen, setIsCreateSubPlanOpen] = React.useState(false);
-  const [planName, setPlanName] = React.useState("");
-  const [selectedPlan, setSelectedPlan] = React.useState(null);
-  const [loadedPlanIds, setLoadedPlanIds] = React.useState([]);
+  const [isEditFormOpen, setIsEditFormOpen] = useState(false);
+  const [isCreateSubPlanOpen, setIsCreateSubPlanOpen] = useState(false);
+  const [isCopySubPlanOpen, setIsCopySubPlanOpen] = useState(false);
+
+  const [planName, setPlanName] = useState("");
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [activePlanKeys, setActivePlanKeys] = useState([]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -66,11 +56,29 @@ const Main = () => {
     }),
   );
 
+  useEffect(() => {
+    if (!plans.length) return;
+    if (!activeSimulationItem?.planId) return;
+
+    const planKey = String(activeSimulationItem.planId);
+
+    const exists = plans.some((plan) => String(plan.id) === planKey);
+    if (!exists) return;
+
+    setActivePlanKeys((prevKeys) => {
+      const keys = prevKeys.map(String);
+
+      if (keys.includes(planKey)) return keys;
+
+      return [...keys, planKey];
+    });
+  }, [plans, activeSimulationItem?.planId]);
+
   const handleDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return;
 
-    const oldIndex = plans.findIndex((x) => x.id === active.id);
-    const newIndex = plans.findIndex((x) => x.id === over.id);
+    const oldIndex = plans.findIndex((x) => String(x.id) === String(active.id));
+    const newIndex = plans.findIndex((x) => String(x.id) === String(over.id));
 
     if (oldIndex === -1 || newIndex === -1) return;
 
@@ -87,9 +95,11 @@ const Main = () => {
   const handleEdit = (plan) => {
     setSelectedPlan(plan);
     setPlanName(plan.name);
+
     form.setFieldsValue({
       planName: plan.name,
     });
+
     setIsEditFormOpen(true);
   };
 
@@ -98,12 +108,17 @@ const Main = () => {
     setIsCreateSubPlanOpen(true);
   };
 
+  const handleCopySubPlan = (plan) => {
+    setSelectedPlan(plan);
+    setIsCopySubPlanOpen(true);
+  };
+
   const handleDelete = (plan) => {
     dispatch(
       DeletePlanRequest({
         rootCommentId,
         folderId: plan.id,
-        plans: plans,
+        plans,
       }),
     );
   };
@@ -112,7 +127,12 @@ const Main = () => {
     if (!selectedPlan) return;
 
     const newPlans = plans.map((x) =>
-      x.id !== selectedPlan.id ? x : { ...x, name: planName },
+      String(x.id) !== String(selectedPlan.id)
+        ? x
+        : {
+            ...x,
+            name: planName,
+          },
     );
 
     dispatch(
@@ -129,70 +149,70 @@ const Main = () => {
   };
 
   const handlePlanCollapseChange = (activeKeys) => {
-    const keys = Array.isArray(activeKeys) ? activeKeys : [activeKeys];
-    console.log("Active keys:", keys);
-    keys.forEach((planId) => {
-      if (!loadedPlanIds.includes(planId)) {
-        console.log("Loading sub plans for plan:", planId);
-        dispatch(
-          GetSubPlansRequest({
-            folderId: planId,
-          }),
-        );
-        setLoadedPlanIds((prev) => [...prev, planId]);
-      }
-    });
+    const keys = Array.isArray(activeKeys)
+      ? activeKeys.map(String)
+      : activeKeys
+        ? [String(activeKeys)]
+        : [];
+
+    setActivePlanKeys(keys);
   };
 
   const collapseItems = plans.map((plan) => ({
-    key: plan.id,
+    key: String(plan.id),
     label: (
       <SortableHeader
         plan={plan}
         onEdit={handleEdit}
         onDelete={handleDelete}
         onAddSubPlan={handleAddSubPlan}
+        onCopySubPlan={handleCopySubPlan}
       />
     ),
     children: (
       <SubPlanCollapse
         plan={plan}
-        plans={plans}
-        rootCommentId={rootCommentId}
-        dispatch={dispatch}
+        activeSimulationItem={activeSimulationItem}
       />
     ),
   }));
 
   return (
     <>
+      <CopySubPlanModal
+        selectedPlan={selectedPlan}
+        open={isCopySubPlanOpen}
+        onCancel={() => {
+          setIsCopySubPlanOpen(false);
+          setSelectedPlan(null);
+        }}
+      />
+
       <SubPlanModal
         title="Create Sub Plan"
         buttonName="Create"
         plan={selectedPlan}
         open={isCreateSubPlanOpen}
-        onCancel={() => setIsCreateSubPlanOpen(false)}
+        onCancel={() => {
+          setIsCreateSubPlanOpen(false);
+          setSelectedPlan(null);
+        }}
       />
 
       <Modal
         title="Edit Plan Name"
         open={isEditFormOpen}
-        onCancel={() => setIsEditFormOpen(false)}
-        footer={null}
-        styles={{
-          header: {
-            padding: 0,
-            marginBottom: 0,
-          },
-          body: {
-            padding: 0,
-          },
+        onCancel={() => {
+          setIsEditFormOpen(false);
+          setSelectedPlan(null);
+          setPlanName("");
+          form.resetFields();
         }}
+        footer={null}
       >
         <Form form={form} autoComplete="off" onFinish={handleModifyName}>
           <Form.Item
             name="planName"
-            style={{ marginBottom: 2 }}
             rules={[
               {
                 required: true,
@@ -207,7 +227,7 @@ const Main = () => {
             />
           </Form.Item>
 
-          <Form.Item style={{ marginBottom: 0 }}>
+          <Form.Item>
             <Button type="primary" htmlType="submit" disabled={!planName}>
               Modify
             </Button>
@@ -222,11 +242,11 @@ const Main = () => {
           onDragEnd={handleDragEnd}
         >
           <SortableContext
-            items={plans.map((x) => x.id)}
+            items={plans.map((x) => String(x.id))}
             strategy={verticalListSortingStrategy}
           >
             <Collapse
-              loading={loading}
+              activeKey={activePlanKeys}
               size="small"
               items={collapseItems}
               onChange={handlePlanCollapseChange}

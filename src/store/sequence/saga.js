@@ -32,46 +32,200 @@ import {
   DeletePlanFailure,
 } from "./action";
 import instance from "../../interceptors/axios";
+//Backup
+function safeParseJson(value, fallback = []) {
+  try {
+    if (!value) return fallback;
+    return JSON.parse(value);
+  } catch (error) {
+    console.error("JSON parse error:", error, value);
+    return fallback;
+  }
+}
+
+function parseSequenceObjects(comments) {
+  if (!comments || comments.length === 0) return [];
+
+  const contents = comments
+    .map((x) => {
+      const [id, content = ""] = x.description.split("tuan");
+
+      return {
+        id,
+        content,
+      };
+    })
+    .sort((a, b) => Number(a.id) - Number(b.id));
+
+  const content = contents.map((x) => x.content).join("");
+
+  const parsed = safeParseJson(content, []);
+
+  if (Array.isArray(parsed)) return parsed;
+
+  if (Array.isArray(parsed.objects)) return parsed.objects;
+
+  return [];
+}
+
 function* getPlansSaga(action) {
   try {
-    //Check Sequence Folder
     const getFolderUrl = `/folders/by_path?path=${action.payload.projectName}&projectId=${action.payload.projectId}`;
     const response = yield call(instance.get, getFolderUrl);
+
     const folders = response.data.filter((x) => x.name === "Sequence");
+
     if (folders.length === 0) {
       const insertFolderUrl = `/folders`;
+
       const insertFolderResponse = yield call(instance.post, insertFolderUrl, {
         name: "Sequence",
         parentId: response.data[0].parentId,
       });
+
       yield put(
         GetPlanSuccess({
+          rootCommentId: null,
           folderId: insertFolderResponse.data.id,
           plans: [],
+          subPlans: [],
+          sequenceObjects: [],
         }),
       );
-    } else {
-      //Get comment in the sequence folder
-      const getCommentUrl = `/comments?objectId=${folders[0].id}&objectType=FOLDER`;
-      const commentResponse = yield call(instance.get, getCommentUrl);
-      const plans = JSON.parse(
-        commentResponse.data.length > 0
-          ? commentResponse.data[0].description
-          : "[]",
-      );
-      console.log(plans);
-      yield put(
-        GetPlanSuccess({
-          rootCommentId:
-            commentResponse.data.length > 0 ? commentResponse.data[0].id : null,
-          folderId: folders[0].id,
-          plans: plans,
-        }),
-      );
+
+      return;
     }
+
+    const sequenceFolderId = folders[0].id;
+
+    const getRootCommentUrl = `/comments?objectId=${sequenceFolderId}&objectType=FOLDER`;
+    const rootCommentResponse = yield call(instance.get, getRootCommentUrl);
+
+    const rootCommentId =
+      rootCommentResponse.data.length > 0
+        ? rootCommentResponse.data[0].id
+        : null;
+
+    const plans = safeParseJson(
+      rootCommentResponse.data.length > 0
+        ? rootCommentResponse.data[0].description
+        : "[]",
+      [],
+    );
+
+    const allSubPlans = [];
+    const allSequenceObjects = [];
+
+    for (const plan of plans) {
+      const getSubPlanCommentUrl = `/comments?objectId=${plan.id}&objectType=FOLDER`;
+
+      const subPlanCommentResponse = yield call(
+        instance.get,
+        getSubPlanCommentUrl,
+      );
+
+      const phaseCommentId =
+        subPlanCommentResponse.data.length > 0
+          ? subPlanCommentResponse.data[0].id
+          : null;
+
+      const subPlansInPlan = safeParseJson(
+        subPlanCommentResponse.data.length > 0
+          ? subPlanCommentResponse.data[0].description
+          : "[]",
+        [],
+      );
+
+      const normalizedSubPlans = subPlansInPlan.map((subPlan) => ({
+        ...subPlan,
+        planId: plan.id,
+        phaseCommentId,
+      }));
+
+      allSubPlans.push(...normalizedSubPlans);
+
+      for (const subPlan of normalizedSubPlans) {
+        const getSequenceCommentUrl = `/comments?objectId=${subPlan.id}&objectType=FOLDER`;
+
+        const sequenceCommentResponse = yield call(
+          instance.get,
+          getSequenceCommentUrl,
+        );
+
+        const objects = parseSequenceObjects(sequenceCommentResponse.data);
+
+        const normalizedObjects = objects.map((obj) => ({
+          ...obj,
+          planId: plan.id,
+          subPlanId: subPlan.id,
+        }));
+
+        allSequenceObjects.push({
+          planId: plan.id,
+          subPlanId: subPlan.id,
+          objects: normalizedObjects,
+        });
+      }
+    }
+
+    yield put(
+      GetPlanSuccess({
+        rootCommentId,
+        folderId: sequenceFolderId,
+        plans,
+        subPlans: allSubPlans,
+        sequenceObjects: allSequenceObjects,
+      }),
+    );
+  } catch (error) {
+    console.error("Error fetching sequence data:", error);
+    yield put(GetPlanFailure(error.message));
+  }
+}
+function* getSubPlansSaga(action) {
+  try {
+    //Get comment in the sequence folder
+    const getCommentUrl = `/comments?objectId=${action.payload.folderId}&objectType=FOLDER`;
+    const commentResponse = yield call(instance.get, getCommentUrl);
+
+    const subPlans = JSON.parse(
+      commentResponse.data.length > 0
+        ? commentResponse.data[0].description
+        : "[]",
+    );
+    console.log("subPlans", subPlans);
+    const sequenceObjects = [];
+    for (const subPlan of subPlans) {
+      const getSequenceCommentUrl = `/comments?objectId=${subPlan.id}&objectType=FOLDER`;
+      const sequenceCommentResponse = yield call(
+        instance.get,
+        getSequenceCommentUrl,
+      );
+      console.log("sequenceCommentResponse", sequenceCommentResponse);
+      const contents = sequenceCommentResponse.data.map((x) => {
+        return {
+          id: x.description.split("tuan")[0],
+          content: x.description.split("tuan")[1],
+        };
+      });
+      contents.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+      const content = contents.map((x) => x.content).join("");
+      const objects = JSON.parse(content.length > 0 ? content : null);
+      sequenceObjects.push(objects);
+    }
+    console.log("sequenceObjects", sequenceObjects);
+    yield put(
+      GetSubPlansSuccess({
+        phaseCommentId:
+          commentResponse.data.length > 0 ? commentResponse.data[0].id : null,
+        phaseFolderId: action.payload.folderId,
+        subPlans: subPlans,
+        sequenceObjects: sequenceObjects,
+      }),
+    );
   } catch (error) {
     console.error("Error fetching folder:", error);
-    yield put(GetPlanFailure(error.message));
+    yield put(GetSubPlansFailure(error.message));
   }
 }
 function* createPlanSaga(action) {
@@ -280,52 +434,6 @@ function* updateSubPlanSaga(action) {
     yield put(UpdateSubPlanFailure(error.message));
   }
 }
-function* getSubPlansSaga(action) {
-  try {
-    //Get comment in the sequence folder
-    const getCommentUrl = `/comments?objectId=${action.payload.folderId}&objectType=FOLDER`;
-    const commentResponse = yield call(instance.get, getCommentUrl);
-
-    const subPlans = JSON.parse(
-      commentResponse.data.length > 0
-        ? commentResponse.data[0].description
-        : "[]",
-    );
-    console.log("subPlans", subPlans);
-    const sequenceObjects = [];
-    for (const subPlan of subPlans) {
-      const getSequenceCommentUrl = `/comments?objectId=${subPlan.id}&objectType=FOLDER`;
-      const sequenceCommentResponse = yield call(
-        instance.get,
-        getSequenceCommentUrl,
-      );
-      console.log("sequenceCommentResponse", sequenceCommentResponse);
-      const contents = sequenceCommentResponse.data.map((x) => {
-        return {
-          id: x.description.split("tuan")[0],
-          content: x.description.split("tuan")[1],
-        };
-      });
-      contents.sort((a, b) => parseInt(a.id) - parseInt(b.id));
-      const content = contents.map((x) => x.content).join("");
-      const objects = JSON.parse(content.length > 0 ? content : null);
-      sequenceObjects.push(objects);
-    }
-    console.log("sequenceObjects", sequenceObjects);
-    yield put(
-      GetSubPlansSuccess({
-        phaseCommentId:
-          commentResponse.data.length > 0 ? commentResponse.data[0].id : null,
-        phaseFolderId: action.payload.folderId,
-        subPlans: subPlans,
-        sequenceObjects: sequenceObjects,
-      }),
-    );
-  } catch (error) {
-    console.error("Error fetching folder:", error);
-    yield put(GetSubPlansFailure(error.message));
-  }
-}
 function* deleteSubPlanSaga(action) {
   try {
     console.log("deleteSubPlanSaga", action.payload);
@@ -394,13 +502,13 @@ function* getSourceSequenceSaga(action) {
 }
 function* copySequenceSaga(action) {
   try {
-    const newSequences = [];
+    const newSubPlans = [];
 
-    for (const sequence of action.payload.sequencesToBeCopied) {
+    for (const subPlan of action.payload.newSubPlans) {
       const insertFolderUrl = "/folders";
       const insertFolderBody = {
-        name: sequence.name,
-        parentId: action.payload.phaseFolderId,
+        name: subPlan.name,
+        parentId: action.payload.planId,
       };
 
       const insertFolderResponse = yield call(
@@ -409,49 +517,48 @@ function* copySequenceSaga(action) {
         insertFolderBody,
       );
 
-      newSequences.push({
+      newSubPlans.push({
         id: insertFolderResponse.data.id,
-        name: sequence.name,
-        color: sequence.color,
+        planId: action.payload.planId,
+        name: subPlan.name,
+        color: subPlan.color,
+        check: false,
       });
     }
-    const updatedSequences = [...action.payload.sequences, ...newSequences];
-    if (action.payload.phaseCommentId) {
-      const updateCommentUrl = `/comments/${action.payload.commentId}`;
-      yield call(instance.patch, updateCommentUrl, {
-        description: JSON.stringify(updatedSequences),
-      });
-      yield put(
-        UpdateCommentSuccess({
-          folders: updatedSequences,
-          phaseCommentId: action.payload.phaseCommentId,
-        }),
-      );
-    } else {
+    //Get comment in the folder
+    const getCommentUrl = `/comments?objectId=${action.payload.planId}&objectType=FOLDER`;
+    const commentResponse = yield call(instance.get, getCommentUrl);
+    const comments = commentResponse.data;
+    console.log("comments", comments);
+    if (comments.length === 0) {
       //Create comment with sequence list
       const createCommentUrl = `/comments`;
       const createCommentBody = {
-        objectId: action.payload.phaseFolderId,
+        objectId: action.payload.planId,
         objectType: "FOLDER",
-        description: JSON.stringify(updatedSequences),
+        description: JSON.stringify(newSubPlans),
       };
       const responseInsertComment = yield call(
         instance.post,
         createCommentUrl,
         createCommentBody,
       );
-
-      yield put(
-        UpdateCommentSuccess({
-          folders: updatedSequences,
-          phaseCommentId: responseInsertComment.data.id,
-        }),
-      );
+    } else {
+      //Update comment with new sequence list
+      const updateCommentUrl = `/comments/${comments[0].id}`;
+      yield call(instance.patch, updateCommentUrl, {
+        description: JSON.stringify(newSubPlans),
+      });
     }
+    yield put(
+      UpdateSubPlanSuccess({
+        subPlans: [...action.payload.subPlans, ...newSubPlans],
+      }),
+    );
   } catch (error) {
     console.error("Error updating comment:", error);
     const message = error?.message ?? "Something went wrong";
-    yield put(UpdateCommentFailure(message));
+    yield put(UpdateSubPlanFailure(error.message));
   }
 }
 function* updateCommentSaga(action) {

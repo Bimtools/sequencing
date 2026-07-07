@@ -5,6 +5,7 @@ const initialState = {
   rootCommentId: null,
   phaseFolderId: null,
   phaseCommentId: null,
+  activeSimulationItem: null,
   plans: [],
   subPlans: [],
   sequencesToBeCopied: [],
@@ -58,11 +59,11 @@ const reducers = (state = initialState, action) => {
       return {
         ...state,
         pending: false,
-        rootCommentId: action.payload.rootCommentId,
         rootFolderId: action.payload.folderId,
-        plans: Array.isArray(action.payload.plans)
-          ? [...action.payload.plans]
-          : [],
+        rootCommentId: action.payload.rootCommentId,
+        plans: action.payload.plans || [],
+        subPlans: action.payload.subPlans || [],
+        sequenceObjects: action.payload.sequenceObjects || [],
       };
 
     case type.DELETE_PLAN_SUCCESS:
@@ -130,6 +131,12 @@ const reducers = (state = initialState, action) => {
         selectedGroup: null,
       };
 
+    case type.SET_ACTIVE_SIMULATION_ITEM:
+      return {
+        ...state,
+        activeSimulationItem: action.payload,
+      };
+
     case type.GET_SOURCE_SEQUENCE_SUCCESS:
       return {
         ...state,
@@ -171,14 +178,26 @@ const reducers = (state = initialState, action) => {
       };
 
     case type.SET_OBJECTS_SUCCESS: {
-      const remaining = state.sequenceObjects.filter(
-        (x) => x && x.folderId !== action.payload.folderId,
+      const subPlanId = action.payload?.subPlanId;
+      const newObjects = action.payload?.objects ?? [];
+
+      const otherSequenceObjects = state.sequenceObjects.filter(
+        (x) => x?.subPlanId !== subPlanId,
       );
+
+      console.log("otherSequenceObjects", otherSequenceObjects);
+      console.log("newObjects", newObjects);
 
       return {
         ...state,
         pending: false,
-        sequenceObjects: [...remaining, action.payload],
+        sequenceObjects: [
+          ...otherSequenceObjects,
+          {
+            subPlanId,
+            objects: newObjects,
+          },
+        ],
       };
     }
 

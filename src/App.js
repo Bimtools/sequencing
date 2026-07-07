@@ -6,6 +6,7 @@ import * as WorkspaceAPI from "trimble-connect-workspace-api";
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Main from "./components/Main";
+import Simulation from "./components/Simulation";
 
 const { Header, Sider, Content, Footer } = Layout;
 
@@ -31,12 +32,34 @@ export default function App() {
     fetchStatus();
   }, []);
   return (
-    <Layout style={{ minHeight: "100vh" }}>
+    <Layout
+      style={{
+        height: "100vh",
+        overflow: "hidden",
+      }}
+    >
       <TopMenu />
-      <Content style={{ margin: 5 }}>
+
+      <Content
+        style={{
+          flex: 1,
+          overflow: "auto",
+          margin: 5,
+        }}
+      >
         <Main />
       </Content>
-      <Footer>Footer</Footer>
+
+      <Footer
+        style={{
+          padding: "8px 16px",
+          background: "#fff",
+          borderTop: "1px solid #f0f0f0",
+          flexShrink: 0,
+        }}
+      >
+        <Simulation />
+      </Footer>
     </Layout>
   );
 }
