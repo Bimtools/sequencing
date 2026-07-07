@@ -221,9 +221,9 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
                     .includes("WEIGHT") &&
                   asm_property.value
                 ) {
-                  weight = asm_property.value;
+                  weight = math.round(Number(asm_property.value),2);
                 }
-
+                
                 return true;
               });
 
