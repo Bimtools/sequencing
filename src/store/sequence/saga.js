@@ -30,6 +30,8 @@ import {
   UpdatePlanFailure,
   DeletePlanSuccess,
   DeletePlanFailure,
+  UploadTemplateSuccess,
+  UploadTemplateFailure,
 } from "./action";
 import instance from "../../interceptors/axios";
 //Backup

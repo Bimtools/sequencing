@@ -306,3 +306,19 @@ export const SetActiveSimulationItem = (payload) => ({
   type: actionType.SET_ACTIVE_SIMULATION_ITEM,
   payload,
 });
+
+
+export const UploadTemplateRequest = (payload) => ({
+  type: actionType.UPLOAD_TEMPLATE_REQUEST,
+  payload,
+});
+
+export const UploadTemplateSuccess = (payload) => ({
+  type: actionType.UPLOAD_TEMPLATE_SUCCESS,
+  payload,
+});
+
+export const UploadTemplateFailure = (payload) => ({
+  type: actionType.UPLOAD_TEMPLATE_FAILURE,
+  payload,
+});

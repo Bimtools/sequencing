@@ -1,9 +1,10 @@
-import { Button, Form, Modal, Tooltip, Input, Flex } from "antd";
+import { Button, Form, Modal, Tooltip, Input, Flex, Upload } from "antd";
 import React from "react";
 import {
   FolderAddOutlined,
   DownloadOutlined,
   FileSearchOutlined,
+  UploadOutlined,
 } from "@ant-design/icons";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -107,6 +108,12 @@ const TopMenu = () => {
     );
   };
 
+  const handleUploadTemplate = async (file) => {
+    console.log("Template:", file);
+    
+    return false;
+  };
+
   const handleExportExcel = () => {
     const data = [];
     let index = 0;
@@ -184,6 +191,19 @@ const TopMenu = () => {
         <h1 style={{ margin: 0, fontSize: 18 }}>Sequencing</h1>
 
         <div>
+          <Tooltip title="Upload Excel Template">
+            <Upload
+              accept=".xlsx"
+              showUploadList={false}
+              beforeUpload={handleUploadTemplate}
+            >
+              <Button
+                size="large"
+                type="text"
+                icon={<UploadOutlined style={{ fontSize: 22 }} />}
+              />
+            </Upload>
+          </Tooltip>
           <Tooltip title="Create new plan">
             <Button
               size="large"

@@ -8,6 +8,7 @@ const initialState = {
   activeSimulationItem: null,
   plans: [],
   subPlans: [],
+  templateFile: null,
   sequencesToBeCopied: [],
   sequenceObjects: [],
   selectedObjects: [],
@@ -29,6 +30,7 @@ const reducers = (state = initialState, action) => {
     case type.GET_SOURCE_SEQUENCE_REQUEST:
     case type.UPDATE_COMMENT_REQUEST:
     case type.SET_OBJECTS_REQUEST:
+    case type.UPLOAD_TEMPLATE_REQUEST:
     case type.SELECT_OBJECTS_REQUEST:
       return {
         ...state,
@@ -213,6 +215,13 @@ const reducers = (state = initialState, action) => {
       };
     }
 
+    case type.UPLOAD_TEMPLATE_SUCCESS:
+      return {
+        ...state,
+        pending: false,
+        templateFile: action.payload.templateFile,
+      };
+
     case type.CREATE_PLAN_FAILURE:
     case type.UPDATE_PLAN_FAILURE:
     case type.GET_PLAN_FAILURE:
@@ -224,6 +233,7 @@ const reducers = (state = initialState, action) => {
     case type.GET_SOURCE_SEQUENCE_FAILURE:
     case type.UPDATE_COMMENT_FAILURE:
     case type.SET_OBJECTS_FAILURE:
+    case type.UPLOAD_TEMPLATE_FAILURE:
     case type.SELECT_OBJECTS_FAILURE:
       return {
         ...state,
