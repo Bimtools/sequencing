@@ -170,18 +170,28 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
             2,
           );
 
+          console.log(items[i]);
           const properties = items[i]?.properties || [];
-
+          let asmName = "";
+          if (items[i].product) {
+            asmName = items[i].product.name;
+          }
           let asm_pos = "";
           let positionCode = "";
           let weight = "";
+
+          let asmLength = "";
+          properties.every((property) => {
+            console.log(property.name);
+          });
 
           properties.every((property) => {
             if (property.name === "ASSEMBLY") {
               const asm_properties = property.properties || [];
 
               asm_properties.every((asm_property) => {
-                if (asm_pos !== "" && positionCode !== "" && weight !== "") return false;
+                if (asm_pos !== "" && positionCode !== "" && weight !== "")
+                  return false;
                 if (asm_property.name.trim() === "ASSEMBLY_POS") {
                   asm_pos = asm_property.value.replace("(?)", "");
                 }
@@ -191,15 +201,24 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
 
               return false;
             }
+            console.log(property.name);
 
             if (
-              property.name.trim() === "Tekla Assembly" ||
-              property.name.trim() === "PropertySet"
+              property.name.trim().includes("Tekla Assembly") ||
+              property.name.trim().includes("PropertySet") ||
+              property.name.trim().includes("Product")
             ) {
               const asm_properties = property.properties || [];
 
               asm_properties.every((asm_property) => {
-                if (asm_pos !== "" && positionCode !== "" && weight !== "") return false;
+                if (
+                  asm_pos !== "" &&
+                  positionCode !== "" &&
+                  weight !== "" &&
+                  asmName !== "" &&
+                  asmLength !== ""
+                )
+                  return false;
                 if (
                   asm_property.name.trim() === "Assembly/Cast unit Mark" ||
                   asm_property.name.trim() === "ASSEMBLY_POS"
@@ -221,7 +240,25 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
                     .includes("WEIGHT") &&
                   asm_property.value
                 ) {
-                  const weight = Number(Number(asm_property.value).toFixed(2));
+                  weight = Number(Number(asm_property.value).toFixed(2));
+                }
+                if (
+                  asm_property.name
+                    .toLocaleUpperCase()
+                    .trim()
+                    .includes("NAME") &&
+                  asm_property.value
+                ) {
+                  asmName = asm_property.value;
+                }
+                if (
+                  asm_property.name
+                    .toLocaleUpperCase()
+                    .trim()
+                    .includes("LENGTH") &&
+                  asm_property.value
+                ) {
+                  asmLength = Number(Number(asm_property.value).toFixed(0));
                 }
 
                 return true;
@@ -245,6 +282,8 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
             asmPos: asm_pos,
             date: dayjs().format("DD-MM-YYYY"),
             weight: weight,
+            length: asmLength,
+            name: asmName,
             positionCode,
           });
         }
@@ -270,6 +309,8 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
         subPlanId: x.subPlanId,
         positionCode: x.positionCode,
         weight: x.weight,
+        name: x.name,
+        length: x.length,
       }));
 
       dispatch(

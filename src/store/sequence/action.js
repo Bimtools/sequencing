@@ -322,3 +322,18 @@ export const UploadTemplateFailure = (payload) => ({
   type: actionType.UPLOAD_TEMPLATE_FAILURE,
   payload,
 });
+
+export const ExportTemplateRequest = (payload) => ({
+  type: actionType.EXPORT_TEMPLATE_REQUEST,
+  payload,
+});
+
+export const ExportTemplateSuccess = (payload) => ({
+  type: actionType.EXPORT_TEMPLATE_SUCCESS,
+  payload,
+});
+
+export const ExportTemplateFailure = (payload) => ({
+  type: actionType.EXPORT_TEMPLATE_FAILURE,
+  payload,
+});
