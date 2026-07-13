@@ -72,13 +72,13 @@ const reducers = (state = initialState, action) => {
       return {
         ...state,
         pending: false,
-        plans: Array.isArray(action.payload.plans)
-          ? [...action.payload.plans]
-          : [],
-        subPlans: [],
-        sequenceObjects: [],
-        selectedObjects: [],
-        selectedGroup: null,
+        plans: Array.isArray(action.payload.plans) ? action.payload.plans : [],
+        subPlans: state.subPlans.filter(
+          (x) => String(x.planId) !== String(action.payload.deletedPlanId),
+        ),
+        sequenceObjects: state.sequenceObjects.filter(
+          (x) => String(x.planId) !== String(action.payload.deletedPlanId),
+        ),
       };
 
     case type.CREATE_SUBPLAN_SUCCESS:

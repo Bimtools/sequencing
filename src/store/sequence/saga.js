@@ -338,6 +338,7 @@ function* deletePlanSaga(action) {
       yield put(
         DeletePlanSuccess({
           plans: [...newPlans],
+          deletedPlanId: action.payload.folderId
         }),
       );
     } else {

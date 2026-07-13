@@ -178,97 +178,90 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
           }
           let asm_pos = "";
           let positionCode = "";
-          let weight = "";
+          let weight = 0;
+          let asmLength = 0;
 
-          let asmLength = "";
-          properties.every((property) => {
-            console.log(property.name);
-          });
+          const isCompleted = () =>
+            asm_pos !== "" &&
+            positionCode !== "" &&
+            weight !== 0 &&
+            asmName !== "" &&
+            asmLength !== 0;
 
-          properties.every((property) => {
-            if (property.name === "ASSEMBLY") {
-              const asm_properties = property.properties || [];
+          for (const property of properties || []) {
+            const propertyName = String(property.name || "")
+              .toUpperCase()
+              .trim();
 
-              asm_properties.every((asm_property) => {
-                if (asm_pos !== "" && positionCode !== "" && weight !== "")
-                  return false;
-                if (asm_property.name.trim() === "ASSEMBLY_POS") {
-                  asm_pos = asm_property.value.replace("(?)", "");
-                }
+            const isValidPropertyGroup =
+              propertyName.includes("ASSEMBLY") ||
+              propertyName.includes("PROPERTY") ||
+              propertyName.includes("PRODUCT") ||
+              propertyName.includes("COMMON") ||
+              propertyName.includes("QUANTITY");
 
-                return true;
-              });
-
-              return false;
-            }
-            console.log(property.name);
-
-            if (
-              property.name.trim().includes("Tekla Assembly") ||
-              property.name.trim().includes("PropertySet") ||
-              property.name.trim().includes("Product")
-            ) {
-              const asm_properties = property.properties || [];
-
-              asm_properties.every((asm_property) => {
-                if (
-                  asm_pos !== "" &&
-                  positionCode !== "" &&
-                  weight !== "" &&
-                  asmName !== "" &&
-                  asmLength !== ""
-                )
-                  return false;
-                if (
-                  asm_property.name.trim() === "Assembly/Cast unit Mark" ||
-                  asm_property.name.trim() === "ASSEMBLY_POS"
-                ) {
-                  asm_pos = asm_property.value;
-                }
-
-                if (
-                  asm_property.name.trim() ===
-                    "Assembly/Cast unit position code" ||
-                  asm_property.name.trim() === "ASSEMBLY_POSITION_CODE"
-                ) {
-                  positionCode = asm_property.value;
-                }
-                if (
-                  asm_property.name
-                    .toLocaleUpperCase()
-                    .trim()
-                    .includes("WEIGHT") &&
-                  asm_property.value
-                ) {
-                  weight = Number(Number(asm_property.value).toFixed(2));
-                }
-                if (
-                  asm_property.name
-                    .toLocaleUpperCase()
-                    .trim()
-                    .includes("NAME") &&
-                  asm_property.value
-                ) {
-                  asmName = asm_property.value;
-                }
-                if (
-                  asm_property.name
-                    .toLocaleUpperCase()
-                    .trim()
-                    .includes("LENGTH") &&
-                  asm_property.value
-                ) {
-                  asmLength = Number(Number(asm_property.value).toFixed(0));
-                }
-
-                return true;
-              });
-
-              return false;
+            if (!isValidPropertyGroup) {
+              continue;
             }
 
-            return true;
-          });
+            for (const asmProperty of property.properties || []) {
+              if (isCompleted()) {
+                break;
+              }
+
+              const name = String(asmProperty.name || "").trim();
+              const upperName = name.toUpperCase();
+              const value = asmProperty.value;
+
+              if (
+                !asm_pos &&
+                (name === "Assembly/Cast unit Mark" ||
+                  upperName === "ASSEMBLY_POS")
+              ) {
+                asm_pos = String(value || "")
+                  .replace("(?)", "")
+                  .trim();
+                continue;
+              }
+
+              if (
+                !positionCode &&
+                (name === "Assembly/Cast unit position code" ||
+                  upperName === "ASSEMBLY_POSITION_CODE")
+              ) {
+                positionCode = String(value || "").trim();
+                continue;
+              }
+
+              if (!weight && upperName.includes("WEIGHT") && value != null) {
+                const parsedWeight = Number(value);
+
+                if (Number.isFinite(parsedWeight)) {
+                  weight =
+                    Math.round((parsedWeight + Number.EPSILON) * 100) / 100;
+                }
+
+                continue;
+              }
+
+              if (!asmName && upperName.includes("NAME") && value != null) {
+                asmName = String(value).trim();
+                continue;
+              }
+
+              if (!asmLength && upperName.includes("LENGTH") && value != null) {
+                const parsedLength = Number(value);
+
+                if (Number.isFinite(parsedLength)) {
+                  asmLength = Math.round(parsedLength);
+                }
+              }
+            }
+
+            if (isCompleted()) {
+              break;
+            }
+          }
 
           const distance = math.distance(refPoint, center);
 
