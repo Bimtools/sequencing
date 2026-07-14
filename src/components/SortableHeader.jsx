@@ -63,27 +63,27 @@ const SortableHeader = ({
             onAssignObject?.(plan);
           }}
         >
-          Assign Object
+          Assign Multiple Assemblies
         </Button>
       ),
     },
-    // onAutoAssign && {
-    //   key: "autoAddOff",
-    //   label: (
-    //     <Button
-    //       size="small"
-    //       type="text"
-    //       icon={<PlusOutlined />}
-    //       onClick={(e) => {
-    //         e.stopPropagation();
-    //         closeDropdown();
-    //         onAutoAssign?.(plan);
-    //       }}
-    //     >
-    //       Assign By Click
-    //     </Button>
-    //   ),
-    // },
+    onAutoAssign && {
+      key: "autoAddOff",
+      label: (
+        <Button
+          size="small"
+          type="text"
+          icon={<PlusOutlined />}
+          onClick={(e) => {
+            e.stopPropagation();
+            closeDropdown();
+            onAutoAssign?.(plan);
+          }}
+        >
+          Assign Picked Assemblies In Order
+        </Button>
+      ),
+    },
     onAddSubPlan && {
       key: "addSubPlan",
       label: (
@@ -132,7 +132,7 @@ const SortableHeader = ({
             onEdit?.(plan);
           }}
         >
-          Edit Name
+          Edit
         </Button>
       ),
     },

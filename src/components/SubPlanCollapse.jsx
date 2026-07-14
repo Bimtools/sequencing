@@ -332,29 +332,155 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
   };
 
   const handleAutoAssign = async (subPlan) => {
-    stopAutoAssign();
+    const tcapi = await WorkspaceAPI.connect(window.parent);
+    const selections = await tcapi.viewer.getSelection();
 
-    await WorkspaceAPI.connect(window.parent);
+    if (!selections?.length) return;
+    const newAddedSequenceObjects = [];
 
-    const onMessage = (event) => {
-      if (event.data.event !== "viewer.onSelectionChanged") return;
+    for (const selection of selections) {
+      const items = await tcapi.viewer.getObjectProperties(
+        selection.modelId,
+        selection.objectRuntimeIds,
+      );
+      for (let i = 0; i < items.length; i++) {
+        console.log(items[i]);
+        const properties = items[i]?.properties || [];
+        let asmName = "";
+        if (items[i].product) {
+          asmName = items[i].product.name;
+        }
+        let asm_pos = "";
+        let positionCode = "";
+        let weight = 0;
+        let asmLength = 0;
 
-      console.log("Selection changed:", event.data.data);
-    };
+        const isCompleted = () =>
+          asm_pos !== "" &&
+          positionCode !== "" &&
+          weight !== 0 &&
+          asmName !== "" &&
+          asmLength !== 0;
 
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") {
-        stopAutoAssign();
+        for (const property of properties || []) {
+          const propertyName = String(property.name || "")
+            .toUpperCase()
+            .trim();
+
+          const isValidPropertyGroup =
+            propertyName.includes("ASSEMBLY") ||
+            propertyName.includes("PROPERTY") ||
+            propertyName.includes("PRODUCT") ||
+            propertyName.includes("COMMON") ||
+            propertyName.includes("QUANTITY");
+
+          if (!isValidPropertyGroup) {
+            continue;
+          }
+
+          for (const asmProperty of property.properties || []) {
+            if (isCompleted()) {
+              break;
+            }
+
+            const name = String(asmProperty.name || "").trim();
+            const upperName = name.toUpperCase();
+            const value = asmProperty.value;
+
+            if (
+              !asm_pos &&
+              (name === "Assembly/Cast unit Mark" ||
+                upperName === "ASSEMBLY_POS")
+            ) {
+              asm_pos = String(value || "")
+                .replace("(?)", "")
+                .trim();
+              continue;
+            }
+
+            if (
+              !positionCode &&
+              (name === "Assembly/Cast unit position code" ||
+                upperName === "ASSEMBLY_POSITION_CODE")
+            ) {
+              positionCode = String(value || "").trim();
+              continue;
+            }
+
+            if (!weight && upperName.includes("WEIGHT") && value != null) {
+              const parsedWeight = Number(value);
+
+              if (Number.isFinite(parsedWeight)) {
+                weight =
+                  Math.round((parsedWeight + Number.EPSILON) * 100) / 100;
+              }
+
+              continue;
+            }
+
+            if (!asmName && upperName.includes("NAME") && value != null) {
+              asmName = String(value).trim();
+              continue;
+            }
+
+            if (!asmLength && upperName.includes("LENGTH") && value != null) {
+              const parsedLength = Number(value);
+
+              if (Number.isFinite(parsedLength)) {
+                asmLength = Math.round(parsedLength);
+              }
+            }
+          }
+
+          if (isCompleted()) {
+            break;
+          }
+        }
+        const center = [0,0,0]
+
+        newAddedSequenceObjects.push({
+          modelId: selection.modelId,
+          subPlanId: subPlan.id,
+          planId: plan.id,
+          id: selection.objectRuntimeIds[i],
+          distance: 0,
+          center,
+          asmPos: asm_pos,
+          date: dayjs().format("DD-MM-YYYY"),
+          weight: weight,
+          length: asmLength,
+          name: asmName,
+          positionCode,
+        });
       }
-    };
+    }
 
-    messageListenerRef.current = onMessage;
-    keyListenerRef.current = onKeyDown;
+    const existingObjects =
+      sequenceObjects.find(
+        (x) => x && String(x.subPlanId) === String(subPlan.id),
+      )?.objects ?? [];
 
-    window.addEventListener("message", onMessage);
-    window.addEventListener("keydown", onKeyDown);
+    const newObjects = [...existingObjects, ...newAddedSequenceObjects];
 
-    console.log("Press ESC to stop Auto Assign");
+    const newAssignedObjects = newObjects.map((x) => ({
+      asmPos: x.asmPos,
+      date: x.date,
+      id: x.id,
+      modelId: x.modelId,
+      planId: x.planId,
+      subPlanId: x.subPlanId,
+      positionCode: x.positionCode,
+      weight: x.weight,
+      name: x.name,
+      length: x.length,
+    }));
+
+    dispatch(
+      SetObjectsRequest({
+        subPlanId: subPlan.id,
+        objects: newAssignedObjects,
+      }),
+    );
   };
 
   useEffect(() => {
