@@ -86,6 +86,8 @@ function* getPlansSaga(action) {
 
     const folders = response.data.filter((x) => x.name === "Sequence");
 
+    console.log(folders);
+
     if (folders.length === 0) {
       const insertFolderUrl = `/folders`;
 
