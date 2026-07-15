@@ -436,7 +436,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
             break;
           }
         }
-        const center = [0,0,0]
+        const center = [0, 0, 0];
 
         newAddedSequenceObjects.push({
           modelId: selection.modelId,
@@ -483,6 +483,41 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
     );
   };
 
+  const handleSortByDate = (subPlan) => {
+    const currentGroup = sequenceObjects.find(
+      (group) => group && String(group.subPlanId) === String(subPlan.id),
+    );
+
+    const objects = currentGroup?.objects || [];
+
+    const sortedObjects = [...objects].sort((a, b) => {
+      const dateA = dayjs(
+        a.date || a.assignedDate || "",
+        ["DD-MM-YYYY", "DD/MM/YYYY", "YYYY-MM-DD"],
+        true,
+      );
+
+      const dateB = dayjs(
+        b.date || b.assignedDate || "",
+        ["DD-MM-YYYY", "DD/MM/YYYY", "YYYY-MM-DD"],
+        true,
+      );
+
+      if (!dateA.isValid() && !dateB.isValid()) return 0;
+      if (!dateA.isValid()) return 1;
+      if (!dateB.isValid()) return -1;
+
+      return dateA.valueOf() - dateB.valueOf();
+    });
+
+    dispatch(
+      SetObjectsRequest({
+        subPlanId: subPlan.id,
+        objects: sortedObjects,
+      }),
+    );
+  };
+
   useEffect(() => {
     return () => {
       stopAutoAssign();
@@ -507,6 +542,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
         }}
         onAssignObject={() => handleAssignObject(subPlan)}
         onAutoAssign={() => handleAutoAssign(subPlan)}
+        onSortByDate={() => handleSortByDate(subPlan)}
       />
     ),
     children: (

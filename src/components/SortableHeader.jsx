@@ -12,6 +12,7 @@ import {
   MoreOutlined,
   PlusOutlined,
   CopyOutlined,
+  SortAscendingOutlined,
 } from "@ant-design/icons";
 
 const SortableHeader = ({
@@ -22,6 +23,7 @@ const SortableHeader = ({
   onAssignObject,
   onAutoAssign,
   onCopySubPlan,
+  onSortByDate,
 }) => {
   const phaseCommentId = useSelector((state) => state.sequence.phaseCommentId);
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
@@ -98,6 +100,23 @@ const SortableHeader = ({
           }}
         >
           Create Sub Plan
+        </Button>
+      ),
+    },
+    onSortByDate && {
+      key: "sortByDate",
+      label: (
+        <Button
+          size="small"
+          type="text"
+          icon={<SortAscendingOutlined />}
+          onClick={(e) => {
+            e.stopPropagation();
+            closeDropdown();
+            onSortByDate(plan);
+          }}
+        >
+          Sort By Date
         </Button>
       ),
     },

@@ -13,6 +13,8 @@ const initialState = {
   sequenceObjects: [],
   selectedObjects: [],
   selectedGroup: null,
+  startDate: null,
+  endDate: null,
   pending: false,
   error: null,
 };
@@ -46,6 +48,12 @@ const reducers = (state = initialState, action) => {
         plans: Array.isArray(action.payload.plans)
           ? [...action.payload.plans]
           : [],
+      };
+    case type.SET_SIMULATION_DATE_RANGE:
+      return {
+        ...state,
+        startDate: action.payload.startDate,
+        endDate: action.payload.endDate,
       };
 
     case type.UPDATE_PLAN_SUCCESS:

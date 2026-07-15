@@ -337,3 +337,8 @@ export const ExportTemplateFailure = (payload) => ({
   type: actionType.EXPORT_TEMPLATE_FAILURE,
   payload,
 });
+
+export const SetSimulationDateRange = (payload) => ({
+  type: actionType.SET_SIMULATION_DATE_RANGE,
+  payload,
+});

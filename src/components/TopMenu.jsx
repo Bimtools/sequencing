@@ -29,6 +29,9 @@ const TopMenu = () => {
   const sequenceObjects = useSelector(
     (state) => state.sequence.sequenceObjects || [],
   );
+  const startDate = useSelector((state) => state.sequence.startDate);
+
+  const endDate = useSelector((state) => state.sequence.endDate);
 
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const planName = Form.useWatch("planName", form);
@@ -308,26 +311,76 @@ const TopMenu = () => {
 
     sequenceObjects.forEach((group) => {
       (group.objects || []).forEach((obj) => {
-        const date = obj.date || obj.assignedDate || "No Date";
+        const date = obj.date || obj.assignedDate;
 
-        if (!dateGroups[date]) {
-          dateGroups[date] = [];
+        const objDate = dayjs(date, "DD-MM-YYYY");
+        const startDateReport = dayjs(startDate, "DD-MM-YYYY");
+        const endDateReport = dayjs(endDate, "DD-MM-YYYY");
+        if (startDate === null && endDate === null) {
+          if (!dateGroups[date]) {
+            dateGroups[date] = [];
+          }
+
+          dateGroups[date].push({
+            AsmName: obj.name || obj.asmName || "",
+            AsmPos: obj.asmPos || "",
+            MainProfile: obj.profile || obj.mainProfile || "",
+            GridPos: obj.positionCode || obj.gridPos || obj.location || "",
+            Length: obj.length || "",
+            Weight: Math.round(Number(obj.weight || 0) * 100) / 100,
+            Comment: obj.comment || "",
+          });
+        } else if (startDate === null && objDate <= endDateReport) {
+          if (!dateGroups[date]) {
+            dateGroups[date] = [];
+          }
+
+          dateGroups[date].push({
+            AsmName: obj.name || obj.asmName || "",
+            AsmPos: obj.asmPos || "",
+            MainProfile: obj.profile || obj.mainProfile || "",
+            GridPos: obj.positionCode || obj.gridPos || obj.location || "",
+            Length: obj.length || "",
+            Weight: Math.round(Number(obj.weight || 0) * 100) / 100,
+            Comment: obj.comment || "",
+          });
+        } else if (endDate === null && objDate >= startDateReport) {
+          if (!dateGroups[date]) {
+            dateGroups[date] = [];
+          }
+
+          dateGroups[date].push({
+            AsmName: obj.name || obj.asmName || "",
+            AsmPos: obj.asmPos || "",
+            MainProfile: obj.profile || obj.mainProfile || "",
+            GridPos: obj.positionCode || obj.gridPos || obj.location || "",
+            Length: obj.length || "",
+            Weight: Math.round(Number(obj.weight || 0) * 100) / 100,
+            Comment: obj.comment || "",
+          });
+        } else if (startDate <= objDate && objDate <= endDateReport) {
+          if (!dateGroups[date]) {
+            dateGroups[date] = [];
+          }
+
+          dateGroups[date].push({
+            AsmName: obj.name || obj.asmName || "",
+            AsmPos: obj.asmPos || "",
+            MainProfile: obj.profile || obj.mainProfile || "",
+            GridPos: obj.positionCode || obj.gridPos || obj.location || "",
+            Length: obj.length || "",
+            Weight: Math.round(Number(obj.weight || 0) * 100) / 100,
+            Comment: obj.comment || "",
+          });
         }
-
-        dateGroups[date].push({
-          AsmName: obj.name || obj.asmName || "",
-          AsmPos: obj.asmPos || "",
-          MainProfile: obj.profile || obj.mainProfile || "",
-          GridPos: obj.positionCode || obj.gridPos || obj.location || "",
-          Length: obj.length || "",
-          Weight: Math.round(Number(obj.weight || 0) * 100) / 100,
-          Comment: obj.comment || "",
-        });
       });
     });
 
     return Object.entries(dateGroups)
-      .sort(([dateA], [dateB]) => dayjs(dateA, "DD-MM-YYYY") - dayjs(dateB, "DD-MM-YYYY"))
+      .sort(
+        ([dateA], [dateB]) =>
+          dayjs(dateA, "DD-MM-YYYY") - dayjs(dateB, "DD-MM-YYYY"),
+      )
       .map(([date, items]) => ({
         date,
         items,

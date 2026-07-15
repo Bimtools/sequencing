@@ -10,7 +10,10 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import * as WorkspaceAPI from "trimble-connect-workspace-api";
-import { SetActiveSimulationItem } from "../store/sequence/action";
+import {
+  SetActiveSimulationItem,
+  SetSimulationDateRange,
+} from "../store/sequence/action";
 
 dayjs.extend(customParseFormat);
 export default function Simulation() {
@@ -343,7 +346,15 @@ export default function Simulation() {
           format="DD-MM-YYYY"
           placeholder="Start Date"
           value={startDate}
-          onChange={(date) => setStartDate(date)}
+          onChange={(date) => {
+            setStartDate(date);
+            dispatch(
+              SetSimulationDateRange({
+                startDate: dates?.[0]?.format("YYYY-MM-DD") || null,
+                endDate: dates?.[1]?.format("YYYY-MM-DD") || null,
+              }),
+            );
+          }}
         />
 
         <DatePicker
@@ -351,7 +362,15 @@ export default function Simulation() {
           format="DD-MM-YYYY"
           placeholder="End Date"
           value={endDate}
-          onChange={(date) => setEndDate(date)}
+          onChange={(date) => {
+            setEndDate(date);
+            dispatch(
+              SetSimulationDateRange({
+                startDate: dates?.[0]?.format("YYYY-MM-DD") || null,
+                endDate: dates?.[1]?.format("YYYY-MM-DD") || null,
+              }),
+            );
+          }}
         />
         {/* <div
               style={{

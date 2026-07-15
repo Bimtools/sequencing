@@ -6,7 +6,14 @@ import React, {
   useEffect,
 } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Empty, List, Dropdown, Button, DatePicker, Input } from "antd";
+import {
+  Empty,
+  List,
+  Dropdown,
+  Button,
+  DatePicker,
+  Input,
+} from "antd";
 import * as WorkspaceAPI from "trimble-connect-workspace-api";
 
 import {
@@ -26,18 +33,47 @@ import {
 
 import { CSS } from "@dnd-kit/utilities";
 
-import { FileOutlined, DeleteOutlined, EditOutlined } from "@ant-design/icons";
+import {
+  FileOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  CloseOutlined,
+} from "@ant-design/icons";
 
 import {
   SetObjectsRequest,
   SetActiveSimulationItem,
 } from "../store/sequence/action";
 
-const getObjectKey = (obj) => `${obj.modelId}-${obj.id}`;
+const getObjectKey = (obj) => {
+  const runtimeId = obj.id || obj.runtimeId || obj.objectRuntimeId;
+
+  return `${obj.modelId}-${runtimeId}`;
+};
+
+const getObjectDate = (obj) => {
+  return obj.date || obj.assignedDate || "";
+};
+
+const isSameObject = (first, second) => {
+  if (!first || !second) return false;
+
+  const firstId =
+    first.id || first.runtimeId || first.objectRuntimeId;
+
+  const secondId =
+    second.id || second.runtimeId || second.objectRuntimeId;
+
+  return (
+    String(first.modelId) === String(second.modelId) &&
+    String(firstId) === String(secondId)
+  );
+};
 
 const SortableSubItem = React.memo(
   ({
     item,
+    displayIndex,
     icon,
     selectedIds,
     setSelectedIds,
@@ -56,15 +92,18 @@ const SortableSubItem = React.memo(
 
     const sortableId = getObjectKey(item);
 
-    const { attributes, listeners, setNodeRef, transform, transition } =
-      useSortable({
-        id: sortableId,
-      });
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+    } = useSortable({
+      id: sortableId,
+    });
 
-    const isSelected = selectedIds.some(
-      (x) =>
-        String(x.modelId) === String(item.modelId) &&
-        String(x.id) === String(item.id),
+    const isSelected = selectedIds.some((selected) =>
+      isSameObject(selected, item),
     );
 
     const style = {
@@ -73,31 +112,31 @@ const SortableSubItem = React.memo(
       cursor: "pointer",
       background: isSelected ? "#e6f4ff" : undefined,
       paddingLeft: 10,
-      paddingRight: 10,
-      border: isSelected ? "1px solid #91caff" : undefined,
+      paddingRight: 2,
+      border: isSelected
+        ? "1px solid #91caff"
+        : undefined,
     };
 
-    const handleClick = async (e) => {
-      e.stopPropagation();
+    const handleClick = async (event) => {
+      event.stopPropagation();
 
       listRef.current?.focus();
 
-      const isCtrlSelect = e.ctrlKey || e.metaKey;
-      const isShiftSelect = e.shiftKey;
+      const isCtrlSelect =
+        event.ctrlKey || event.metaKey;
+
+      const isShiftSelect = event.shiftKey;
 
       let nextSelection = [];
 
       if (isShiftSelect && lastSelected) {
-        const startIndex = currentObjects.findIndex(
-          (x) =>
-            String(x.modelId) === String(lastSelected.modelId) &&
-            String(x.id) === String(lastSelected.id),
+        const startIndex = currentObjects.findIndex((obj) =>
+          isSameObject(obj, lastSelected),
         );
 
-        const endIndex = currentObjects.findIndex(
-          (x) =>
-            String(x.modelId) === String(item.modelId) &&
-            String(x.id) === String(item.id),
+        const endIndex = currentObjects.findIndex((obj) =>
+          isSameObject(obj, item),
         );
 
         if (startIndex !== -1 && endIndex !== -1) {
@@ -108,26 +147,25 @@ const SortableSubItem = React.memo(
 
           nextSelection = [
             ...new Map(
-              [...selectedIds, ...range].map((x) => [getObjectKey(x), x]),
+              [...selectedIds, ...range].map((obj) => [
+                getObjectKey(obj),
+                obj,
+              ]),
             ).values(),
           ];
 
           setSelectedIds(nextSelection);
+          setLastSelected(item);
         }
       } else if (isCtrlSelect) {
-        const exists = selectedIds.some(
-          (x) =>
-            String(x.modelId) === String(item.modelId) &&
-            String(x.id) === String(item.id),
+        const exists = selectedIds.some((selected) =>
+          isSameObject(selected, item),
         );
 
         nextSelection = exists
           ? selectedIds.filter(
-              (x) =>
-                !(
-                  String(x.modelId) === String(item.modelId) &&
-                  String(x.id) === String(item.id)
-                ),
+              (selected) =>
+                !isSameObject(selected, item),
             )
           : [...selectedIds, item];
 
@@ -141,10 +179,8 @@ const SortableSubItem = React.memo(
         setActiveItem(item);
       }
 
-      const clickedIndex = currentObjects.findIndex(
-        (x) =>
-          String(x.modelId) === String(item.modelId) &&
-          String(x.id) === String(item.id),
+      const clickedIndex = currentObjects.findIndex((obj) =>
+        isSameObject(obj, item),
       );
 
       if (clickedIndex !== -1) {
@@ -152,6 +188,11 @@ const SortableSubItem = React.memo(
       }
 
       await selectObjectsInViewer(nextSelection);
+    };
+
+    const handleDeleteClick = (event) => {
+      event.stopPropagation();
+      onDelete(item);
     };
 
     const contextMenuItems = [
@@ -164,21 +205,30 @@ const SortableSubItem = React.memo(
               gap: 8,
               alignItems: "center",
             }}
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+            onMouseDown={(event) =>
+              event.stopPropagation()
+            }
+            onPointerDown={(event) =>
+              event.stopPropagation()
+            }
           >
             <DatePicker
               size="small"
               value={assignDate}
-              onChange={(date) => setAssignDate(date)}
+              onChange={setAssignDate}
             />
 
             <Input
               size="small"
-              style={{ width: 40 }}
+              type="number"
+              style={{ width: 50 }}
               value={dateStep}
-              onChange={(e) => setDateStep(e.target.value)}
+              onChange={(event) =>
+                setDateStep(event.target.value)
+              }
             />
 
             <Button
@@ -186,8 +236,13 @@ const SortableSubItem = React.memo(
               type="text"
               disabled={!assignDate}
               icon={<EditOutlined />}
-              onClick={() => {
-                onAssignDate(assignDate, dateStep);
+              onClick={(event) => {
+                event.stopPropagation();
+
+                onAssignDate(
+                  assignDate,
+                  dateStep,
+                );
               }}
             />
           </div>
@@ -198,18 +253,27 @@ const SortableSubItem = React.memo(
       },
       {
         key: "delete",
-        label: (
-          <Button
-            type="text"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => onDelete(item)}
-          >
-            Delete
-          </Button>
-        ),
+        danger: true,
+        icon: <DeleteOutlined />,
+        label: "Delete",
+        onClick: ({ domEvent }) => {
+          domEvent.stopPropagation();
+          onDelete(item);
+        },
       },
     ];
+
+    const displayWeight =
+      item.weight != null &&
+      Number.isFinite(Number(item.weight))
+        ? Math.round(
+            (Number(item.weight) +
+              Number.EPSILON) *
+              100,
+          ) / 100
+        : null;
+
+    const displayDate = getObjectDate(item);
 
     return (
       <Dropdown
@@ -231,36 +295,70 @@ const SortableSubItem = React.memo(
               display: "flex",
               alignItems: "center",
               width: "100%",
+              gap: 8,
             }}
           >
             <span
               {...listeners}
               style={{
+                display: "flex",
+                alignItems: "center",
                 cursor: "grab",
-                marginRight: 12,
+                flexShrink: 0,
               }}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(event) =>
+                event.stopPropagation()
+              }
             >
               {icon}
             </span>
 
-            <strong>
-              {item.asmPos ?? item.id}
-              {item.positionCode != null && ` [${item.positionCode}]`}
-              {item.weight != null && ` (${Number(Number(item.weight || 0).toFixed(2))} kg)`}
+            <strong
+              style={{
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span
+                style={{
+                  display: "inline-block",
+                  minWidth: 24,
+                }}
+              >
+                {displayIndex}.
+              </span>
+
+              {item.asmPos || item.id}
+
+              {item.positionCode
+                ? ` [${item.positionCode}]`
+                : ""}
+
+              {displayWeight != null
+                ? ` (${displayWeight} kg)`
+                : ""}
             </strong>
 
             <div style={{ flex: 1 }} />
 
-            {item.date && (
+            {displayDate && (
               <span
                 style={{
                   opacity: 0.7,
+                  whiteSpace: "nowrap",
                 }}
               >
-                {item.date}
+                {displayDate}
               </span>
             )}
+
+            <Button
+              type="text"
+              icon={<CloseOutlined />}
+              onClick={handleDeleteClick}
+            />
           </div>
         </List.Item>
       </Dropdown>
@@ -268,18 +366,29 @@ const SortableSubItem = React.memo(
   },
 );
 
-const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
+const SequenceObjectCollapse = ({
+  subPlan,
+  activeSimulationItem,
+}) => {
   const dispatch = useDispatch();
 
   const sequenceObjects = useSelector(
-    (state) => state.sequence.sequenceObjects,
+    (state) =>
+      state.sequence.sequenceObjects || [],
   );
 
-  const loading = useSelector((state) => state.sequence.pending);
+  const loading = useSelector(
+    (state) => state.sequence.pending,
+  );
 
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [lastSelected, setLastSelected] = useState(null);
-  const [focusedIndex, setFocusedIndex] = useState(0);
+  const [selectedIds, setSelectedIds] =
+    useState([]);
+
+  const [lastSelected, setLastSelected] =
+    useState(null);
+
+  const [focusedIndex, setFocusedIndex] =
+    useState(0);
 
   const tcapiRef = useRef(null);
   const listRef = useRef(null);
@@ -287,7 +396,10 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
   useEffect(() => {
     const connectApi = async () => {
       try {
-        tcapiRef.current = await WorkspaceAPI.connect(window.parent);
+        tcapiRef.current =
+          await WorkspaceAPI.connect(
+            window.parent,
+          );
       } catch (error) {
         console.error(error);
       }
@@ -305,26 +417,62 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
   );
 
   const currentObjects = useMemo(() => {
-    const subPlanObjects = sequenceObjects.find(
-      (x) => x && String(x.subPlanId) === String(subPlan.id),
-    );
+    const subPlanObjects =
+      sequenceObjects.find(
+        (group) =>
+          group &&
+          String(group.subPlanId) ===
+            String(subPlan.id),
+      );
 
     return subPlanObjects?.objects || [];
   }, [sequenceObjects, subPlan.id]);
 
+  /*
+   * Đánh số theo ngày nhưng không thay đổi thứ tự
+   * của currentObjects.
+   *
+   * 15-07-2026: 1, 2, 3, 4
+   * 18-07-2026: 1, 2
+   */
+  const displayIndexMap = useMemo(() => {
+    const dateCounters = new Map();
+    const objectIndexes = new Map();
+
+    currentObjects.forEach((item) => {
+      const dateKey =
+        getObjectDate(item) || "NO_DATE";
+
+      const nextIndex =
+        (dateCounters.get(dateKey) || 0) + 1;
+
+      dateCounters.set(dateKey, nextIndex);
+      objectIndexes.set(
+        getObjectKey(item),
+        nextIndex,
+      );
+    });
+
+    return objectIndexes;
+  }, [currentObjects]);
+
   const items = useMemo(() => {
     const result = [];
 
-    sequenceObjects.forEach((plan) => {
-      const objects = plan.objects || [];
+    sequenceObjects.forEach((group) => {
+      const objects = group.objects || [];
 
       objects.forEach((obj) => {
-        const runtimeId = obj.id || obj.runtimeId || obj.objectRuntimeId;
+        const runtimeId =
+          obj.id ||
+          obj.runtimeId ||
+          obj.objectRuntimeId;
 
         result.push({
           ...obj,
-          planId: plan.planId || plan.id,
-          subPlanId: plan.subPlanId,
+          planId:
+            group.planId || group.id,
+          subPlanId: group.subPlanId,
           modelId: obj.modelId,
           id: runtimeId,
         });
@@ -346,33 +494,73 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
     [dispatch, subPlan.id],
   );
 
-  const selectObjectsInViewer = useCallback(async (objects) => {
-    try {
-      const tcapi = tcapiRef.current;
+  const selectObjectsInViewer = useCallback(
+    async (objects) => {
+      try {
+        const tcapi = tcapiRef.current;
 
-      if (!tcapi || !objects?.length) {
-        return;
+        if (!tcapi || !objects?.length) {
+          return;
+        }
+
+        const modelGroups = new Map();
+
+        objects.forEach((item) => {
+          const runtimeId =
+            item.id ||
+            item.runtimeId ||
+            item.objectRuntimeId;
+
+          if (
+            !item.modelId ||
+            runtimeId == null
+          ) {
+            return;
+          }
+
+          const modelKey = String(
+            item.modelId,
+          );
+
+          if (!modelGroups.has(modelKey)) {
+            modelGroups.set(modelKey, {
+              modelId: item.modelId,
+              objectRuntimeIds: [],
+            });
+          }
+
+          modelGroups
+            .get(modelKey)
+            .objectRuntimeIds.push(runtimeId);
+        });
+
+        await tcapi.viewer.setSelection(
+          {
+            modelObjectIds: [
+              ...modelGroups.values(),
+            ],
+          },
+          "set",
+        );
+      } catch (error) {
+        console.error(error);
       }
-
-      await tcapi.viewer.setSelection(
-        {
-          modelObjectIds: objects.map((x) => ({
-            modelId: x.modelId,
-            objectRuntimeIds: [x.id || x.runtimeId || x.objectRuntimeId],
-          })),
-        },
-        "set",
-      );
-    } catch (error) {
-      console.error(error);
-    }
-  }, []);
+    },
+    [],
+  );
 
   const changeIndex = useCallback(
     async (newIndex) => {
       if (!items.length) return;
 
-      const safeIndex = Math.max(0, Math.min(newIndex, items.length - 1));
+      const safeIndex = Math.max(
+        0,
+        Math.min(
+          newIndex,
+          items.length - 1,
+        ),
+      );
+
       const item = items[safeIndex];
 
       dispatch(
@@ -386,33 +574,44 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
 
       await selectObjectsInViewer([item]);
     },
-    [items, dispatch, selectObjectsInViewer],
+    [
+      items,
+      dispatch,
+      selectObjectsInViewer,
+    ],
   );
 
   const getCurrentIndex = useCallback(() => {
     if (activeSimulationItem) {
       return items.findIndex(
-        (x) =>
-          String(x.subPlanId) === String(activeSimulationItem.subPlanId) &&
-          String(x.modelId) === String(activeSimulationItem.modelId) &&
-          String(x.id) === String(activeSimulationItem.id),
+        (item) =>
+          String(item.subPlanId) ===
+            String(
+              activeSimulationItem.subPlanId,
+            ) &&
+          String(item.modelId) ===
+            String(
+              activeSimulationItem.modelId,
+            ) &&
+          String(item.id) ===
+            String(activeSimulationItem.id),
       );
     }
 
-    const currentItem = selectedIds[0] || currentObjects[focusedIndex];
+    const currentItem =
+      selectedIds[0] ||
+      currentObjects[focusedIndex];
 
     if (!currentItem) return -1;
 
     return items.findIndex(
-      (x) =>
-        String(x.subPlanId) === String(currentItem.subPlanId || subPlan.id) &&
-        String(x.modelId) === String(currentItem.modelId) &&
-        String(x.id) ===
+      (item) =>
+        String(item.subPlanId) ===
           String(
-            currentItem.id ||
-              currentItem.runtimeId ||
-              currentItem.objectRuntimeId,
-          ),
+            currentItem.subPlanId ||
+              subPlan.id,
+          ) &&
+        isSameObject(item, currentItem),
     );
   }, [
     items,
@@ -447,12 +646,16 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
 
   const setActiveItem = useCallback(
     (item) => {
-      const runtimeId = item.id || item.runtimeId || item.objectRuntimeId;
+      const runtimeId =
+        item.id ||
+        item.runtimeId ||
+        item.objectRuntimeId;
 
       dispatch(
         SetActiveSimulationItem({
           planId: item.planId,
-          subPlanId: item.subPlanId || subPlan.id,
+          subPlanId:
+            item.subPlanId || subPlan.id,
           modelId: item.modelId,
           id: runtimeId,
         }),
@@ -462,15 +665,37 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
   );
 
   useEffect(() => {
-    if (!activeSimulationItem || !currentObjects.length) return;
+    if (
+      !activeSimulationItem ||
+      !currentObjects.length
+    ) {
+      return;
+    }
 
-    if (String(activeSimulationItem.subPlanId) !== String(subPlan.id)) return;
+    if (
+      String(
+        activeSimulationItem.subPlanId,
+      ) !== String(subPlan.id)
+    ) {
+      return;
+    }
 
-    const index = currentObjects.findIndex(
-      (x) =>
-        String(x.modelId) === String(activeSimulationItem.modelId) &&
-        String(x.id) === String(activeSimulationItem.id),
-    );
+    const index =
+      currentObjects.findIndex(
+        (item) =>
+          String(item.modelId) ===
+            String(
+              activeSimulationItem.modelId,
+            ) &&
+          String(
+            item.id ||
+              item.runtimeId ||
+              item.objectRuntimeId,
+          ) ===
+            String(
+              activeSimulationItem.id,
+            ),
+      );
 
     if (index === -1) return;
 
@@ -480,32 +705,44 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
     setSelectedIds([item]);
     setLastSelected(item);
 
-    setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       listRef.current?.focus();
 
-      const el = listRef.current?.querySelector(
-        `[data-object-key="${getObjectKey(item)}"]`,
-      );
+      const element =
+        listRef.current?.querySelector(
+          `[data-object-key="${getObjectKey(
+            item,
+          )}"]`,
+        );
 
-      el?.scrollIntoView({
+      element?.scrollIntoView({
         behavior: "smooth",
         block: "center",
       });
     }, 150);
-  }, [activeSimulationItem, currentObjects, subPlan.id]);
+
+    return () => clearTimeout(timeoutId);
+  }, [
+    activeSimulationItem,
+    currentObjects,
+    subPlan.id,
+  ]);
 
   const handleKeyDown = useCallback(
-    (e) => {
-      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (e.key === "ArrowDown") {
-        next();
+    (event) => {
+      if (
+        event.key !== "ArrowDown" &&
+        event.key !== "ArrowUp"
+      ) {
+        return;
       }
 
-      if (e.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.key === "ArrowDown") {
+        next();
+      } else {
         prev();
       }
     },
@@ -516,23 +753,37 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
     (event) => {
       const { active, over } = event;
 
-      if (!over || active.id === over.id) {
+      if (
+        !over ||
+        active.id === over.id
+      ) {
         return;
       }
 
-      const oldIndex = currentObjects.findIndex(
-        (x) => getObjectKey(x) === active.id,
-      );
+      const oldIndex =
+        currentObjects.findIndex(
+          (item) =>
+            getObjectKey(item) === active.id,
+        );
 
-      const newIndex = currentObjects.findIndex(
-        (x) => getObjectKey(x) === over.id,
-      );
+      const newIndex =
+        currentObjects.findIndex(
+          (item) =>
+            getObjectKey(item) === over.id,
+        );
 
-      if (oldIndex < 0 || newIndex < 0) {
+      if (
+        oldIndex < 0 ||
+        newIndex < 0
+      ) {
         return;
       }
 
-      const reordered = arrayMove(currentObjects, oldIndex, newIndex);
+      const reordered = arrayMove(
+        currentObjects,
+        oldIndex,
+        newIndex,
+      );
 
       updateObjects(reordered);
       setFocusedIndex(newIndex);
@@ -545,15 +796,26 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
       if (!date) return;
 
       const step = Number(dateStep) || 0;
-      const selectedKeys = selectedIds.map((x) => getObjectKey(x));
+
+      const selectedKeys = new Set(
+        selectedIds.map((item) =>
+          getObjectKey(item),
+        ),
+      );
 
       let dateCount = 0;
 
-      const updated = currentObjects.map((obj) => {
-        const key = getObjectKey(obj);
+      const updated = currentObjects.map(
+        (obj) => {
+          const key = getObjectKey(obj);
 
-        if (selectedKeys.includes(key)) {
-          const assignedDate = date.add(dateCount, "day").format("DD-MM-YYYY");
+          if (!selectedKeys.has(key)) {
+            return obj;
+          }
+
+          const assignedDate = date
+            .add(dateCount, "day")
+            .format("DD-MM-YYYY");
 
           dateCount += step;
 
@@ -561,69 +823,86 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
             ...obj,
             date: assignedDate,
           };
-        }
-
-        return obj;
-      });
+        },
+      );
 
       updateObjects(updated);
     },
-    [currentObjects, selectedIds, updateObjects],
+    [
+      currentObjects,
+      selectedIds,
+      updateObjects,
+    ],
   );
 
   const handleDelete = useCallback(
     (item) => {
-      const updated = currentObjects.filter(
-        (obj) =>
-          !(
-            String(obj.modelId) === String(item.modelId) &&
-            String(obj.id) === String(item.id)
-          ),
-      );
-      const remainingObjects = [];
-      for (const obj of sequenceObjects) {
-        const index = remainingObjects.findIndex(
-          (x) => x.subPlanId === obj.subPlanId,
+      const updated =
+        currentObjects.filter(
+          (obj) =>
+            !isSameObject(obj, item),
         );
-        if (index === -1) {
-          remainingObjects.push({
-            planId: obj.planId,
-            subPlanId: obj.subPlanId,
-            objects: [obj],
-          });
-        } else {
-          remainingObjects[index].objects.push(obj);
-        }
-      }
 
       updateObjects(updated);
 
-      setSelectedIds((prev) =>
-        prev.filter(
-          (x) =>
-            !(
-              String(x.modelId) === String(item.modelId) &&
-              String(x.id) === String(item.id)
+      setSelectedIds((previous) =>
+        previous.filter(
+          (selected) =>
+            !isSameObject(
+              selected,
+              item,
             ),
         ),
       );
 
-      setFocusedIndex((prev) =>
-        Math.max(0, Math.min(prev, updated.length - 1)),
+      setLastSelected((previous) =>
+        isSameObject(previous, item)
+          ? null
+          : previous,
       );
+
+      setFocusedIndex((previous) => {
+        if (!updated.length) return -1;
+
+        return Math.max(
+          0,
+          Math.min(
+            previous,
+            updated.length - 1,
+          ),
+        );
+      });
     },
     [currentObjects, updateObjects],
   );
 
   useEffect(() => {
-    if (focusedIndex > currentObjects.length - 1) {
-      setFocusedIndex(Math.max(0, currentObjects.length - 1));
+    if (!currentObjects.length) {
+      setFocusedIndex(-1);
+      return;
     }
-  }, [currentObjects.length, focusedIndex]);
+
+    if (
+      focusedIndex >
+      currentObjects.length - 1
+    ) {
+      setFocusedIndex(
+        currentObjects.length - 1,
+      );
+    }
+  }, [
+    currentObjects.length,
+    focusedIndex,
+  ]);
 
   if (!currentObjects.length) {
     return (
-      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No Objects" />
+      <Empty
+        image={
+          Empty.PRESENTED_IMAGE_SIMPLE
+        }
+        description="No Objects"
+      />
     );
   }
 
@@ -634,8 +913,12 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
       onDragEnd={onDragEndSubItem}
     >
       <SortableContext
-        items={currentObjects.map((x) => getObjectKey(x))}
-        strategy={verticalListSortingStrategy}
+        items={currentObjects.map((item) =>
+          getObjectKey(item),
+        )}
+        strategy={
+          verticalListSortingStrategy
+        }
       >
         <div
           ref={listRef}
@@ -658,17 +941,36 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem }) => {
               <SortableSubItem
                 key={getObjectKey(item)}
                 item={item}
+                displayIndex={
+                  displayIndexMap.get(
+                    getObjectKey(item),
+                  ) || 1
+                }
                 selectedIds={selectedIds}
-                setSelectedIds={setSelectedIds}
+                setSelectedIds={
+                  setSelectedIds
+                }
                 lastSelected={lastSelected}
-                setLastSelected={setLastSelected}
-                setFocusedIndex={setFocusedIndex}
-                currentObjects={currentObjects}
+                setLastSelected={
+                  setLastSelected
+                }
+                setFocusedIndex={
+                  setFocusedIndex
+                }
+                currentObjects={
+                  currentObjects
+                }
                 icon={<FileOutlined />}
-                onAssignDate={handleAssignDate}
+                onAssignDate={
+                  handleAssignDate
+                }
                 onDelete={handleDelete}
-                selectObjectsInViewer={selectObjectsInViewer}
-                setActiveItem={setActiveItem}
+                selectObjectsInViewer={
+                  selectObjectsInViewer
+                }
+                setActiveItem={
+                  setActiveItem
+                }
                 listRef={listRef}
               />
             )}
