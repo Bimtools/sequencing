@@ -518,6 +518,34 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
     );
   };
 
+  const getObjectKey = (obj) => {
+    const runtimeId = obj.id || obj.runtimeId || obj.objectRuntimeId;
+
+    return `${obj.modelId}-${runtimeId}`;
+  };
+
+  const getObjectDate = (obj) => {
+    return obj.date || obj.assignedDate || "";
+  };
+
+  const displayIndexMap = useMemo(() => {
+    const dateCounters = new Map();
+    const objectIndexes = new Map();
+
+    sequenceObjects.forEach((group) => {
+      (group.objects || []).forEach((item) => {
+        const dateKey = getObjectDate(item) || "NO_DATE";
+
+        const nextIndex = (dateCounters.get(dateKey) || 0) + 1;
+
+        dateCounters.set(dateKey, nextIndex);
+        objectIndexes.set(getObjectKey(item), nextIndex);
+      });
+    });
+
+    return objectIndexes;
+  }, [sequenceObjects, plan.id, subPlans ]);
+
   useEffect(() => {
     return () => {
       stopAutoAssign();
@@ -549,6 +577,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
       <SequenceObjectCollapse
         subPlan={subPlan}
         activeSimulationItem={activeSimulationItem}
+        displayIndexMap={displayIndexMap}
       />
     ),
     style: {

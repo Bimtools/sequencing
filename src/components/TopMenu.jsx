@@ -273,7 +273,6 @@ const TopMenu = () => {
     const { groupRowIndex, itemRowIndex } = findTemplateRows(worksheet);
 
     let insertAt = itemRowIndex + 1;
-
     groups.forEach((group) => {
       const groupRow = copyRowTo(worksheet, groupRowIndex, insertAt);
 
@@ -309,77 +308,47 @@ const TopMenu = () => {
   const buildGroups = () => {
     const dateGroups = {};
 
+    const start = startDate ? dayjs(startDate, "DD-MM-YYYY") : null;
+    const end = endDate ? dayjs(endDate, "DD-MM-YYYY") : null;
+
     sequenceObjects.forEach((group) => {
       (group.objects || []).forEach((obj) => {
         const date = obj.date || obj.assignedDate;
-
         const objDate = dayjs(date, "DD-MM-YYYY");
-        const startDateReport = dayjs(startDate, "DD-MM-YYYY");
-        const endDateReport = dayjs(endDate, "DD-MM-YYYY");
-        if (startDate === null && endDate === null) {
-          if (!dateGroups[date]) {
-            dateGroups[date] = [];
-          }
 
-          dateGroups[date].push({
-            AsmName: obj.name || obj.asmName || "",
-            AsmPos: obj.asmPos || "",
-            MainProfile: obj.profile || obj.mainProfile || "",
-            GridPos: obj.positionCode || obj.gridPos || obj.location || "",
-            Length: obj.length || "",
-            Weight: Math.round(Number(obj.weight || 0) * 100) / 100,
-            Comment: obj.comment || "",
-          });
-        } else if (startDate === null && objDate <= endDateReport) {
-          if (!dateGroups[date]) {
-            dateGroups[date] = [];
-          }
+        let include = true;
 
-          dateGroups[date].push({
-            AsmName: obj.name || obj.asmName || "",
-            AsmPos: obj.asmPos || "",
-            MainProfile: obj.profile || obj.mainProfile || "",
-            GridPos: obj.positionCode || obj.gridPos || obj.location || "",
-            Length: obj.length || "",
-            Weight: Math.round(Number(obj.weight || 0) * 100) / 100,
-            Comment: obj.comment || "",
-          });
-        } else if (endDate === null && objDate >= startDateReport) {
-          if (!dateGroups[date]) {
-            dateGroups[date] = [];
-          }
-
-          dateGroups[date].push({
-            AsmName: obj.name || obj.asmName || "",
-            AsmPos: obj.asmPos || "",
-            MainProfile: obj.profile || obj.mainProfile || "",
-            GridPos: obj.positionCode || obj.gridPos || obj.location || "",
-            Length: obj.length || "",
-            Weight: Math.round(Number(obj.weight || 0) * 100) / 100,
-            Comment: obj.comment || "",
-          });
-        } else if (startDate <= objDate && objDate <= endDateReport) {
-          if (!dateGroups[date]) {
-            dateGroups[date] = [];
-          }
-
-          dateGroups[date].push({
-            AsmName: obj.name || obj.asmName || "",
-            AsmPos: obj.asmPos || "",
-            MainProfile: obj.profile || obj.mainProfile || "",
-            GridPos: obj.positionCode || obj.gridPos || obj.location || "",
-            Length: obj.length || "",
-            Weight: Math.round(Number(obj.weight || 0) * 100) / 100,
-            Comment: obj.comment || "",
-          });
+        if (start && objDate.isBefore(start, "day")) {
+          include = false;
         }
+
+        if (end && objDate.isAfter(end, "day")) {
+          include = false;
+        }
+
+        if (!include) return;
+
+        if (!dateGroups[date]) {
+          dateGroups[date] = [];
+        }
+
+        dateGroups[date].push({
+          AsmName: obj.name || obj.asmName || "",
+          AsmPos: obj.asmPos || "",
+          MainProfile: obj.profile || obj.mainProfile || "",
+          GridPos: obj.positionCode || obj.gridPos || obj.location || "",
+          Length: obj.length || "",
+          Weight: Math.round(Number(obj.weight || 0) * 100) / 100,
+          Comment: obj.comment || "",
+        });
       });
     });
 
     return Object.entries(dateGroups)
       .sort(
         ([dateA], [dateB]) =>
-          dayjs(dateA, "DD-MM-YYYY") - dayjs(dateB, "DD-MM-YYYY"),
+          dayjs(dateA, "DD-MM-YYYY").valueOf() -
+          dayjs(dateB, "DD-MM-YYYY").valueOf(),
       )
       .map(([date, items]) => ({
         date,

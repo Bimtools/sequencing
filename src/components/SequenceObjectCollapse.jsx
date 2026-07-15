@@ -6,14 +6,7 @@ import React, {
   useEffect,
 } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import {
-  Empty,
-  List,
-  Dropdown,
-  Button,
-  DatePicker,
-  Input,
-} from "antd";
+import { Empty, List, Dropdown, Button, DatePicker, Input } from "antd";
 import * as WorkspaceAPI from "trimble-connect-workspace-api";
 
 import {
@@ -58,11 +51,9 @@ const getObjectDate = (obj) => {
 const isSameObject = (first, second) => {
   if (!first || !second) return false;
 
-  const firstId =
-    first.id || first.runtimeId || first.objectRuntimeId;
+  const firstId = first.id || first.runtimeId || first.objectRuntimeId;
 
-  const secondId =
-    second.id || second.runtimeId || second.objectRuntimeId;
+  const secondId = second.id || second.runtimeId || second.objectRuntimeId;
 
   return (
     String(first.modelId) === String(second.modelId) &&
@@ -92,15 +83,10 @@ const SortableSubItem = React.memo(
 
     const sortableId = getObjectKey(item);
 
-    const {
-      attributes,
-      listeners,
-      setNodeRef,
-      transform,
-      transition,
-    } = useSortable({
-      id: sortableId,
-    });
+    const { attributes, listeners, setNodeRef, transform, transition } =
+      useSortable({
+        id: sortableId,
+      });
 
     const isSelected = selectedIds.some((selected) =>
       isSameObject(selected, item),
@@ -113,9 +99,7 @@ const SortableSubItem = React.memo(
       background: isSelected ? "#e6f4ff" : undefined,
       paddingLeft: 10,
       paddingRight: 2,
-      border: isSelected
-        ? "1px solid #91caff"
-        : undefined,
+      border: isSelected ? "1px solid #91caff" : undefined,
     };
 
     const handleClick = async (event) => {
@@ -123,8 +107,7 @@ const SortableSubItem = React.memo(
 
       listRef.current?.focus();
 
-      const isCtrlSelect =
-        event.ctrlKey || event.metaKey;
+      const isCtrlSelect = event.ctrlKey || event.metaKey;
 
       const isShiftSelect = event.shiftKey;
 
@@ -147,10 +130,7 @@ const SortableSubItem = React.memo(
 
           nextSelection = [
             ...new Map(
-              [...selectedIds, ...range].map((obj) => [
-                getObjectKey(obj),
-                obj,
-              ]),
+              [...selectedIds, ...range].map((obj) => [getObjectKey(obj), obj]),
             ).values(),
           ];
 
@@ -163,10 +143,7 @@ const SortableSubItem = React.memo(
         );
 
         nextSelection = exists
-          ? selectedIds.filter(
-              (selected) =>
-                !isSameObject(selected, item),
-            )
+          ? selectedIds.filter((selected) => !isSameObject(selected, item))
           : [...selectedIds, item];
 
         setSelectedIds(nextSelection);
@@ -205,15 +182,9 @@ const SortableSubItem = React.memo(
               gap: 8,
               alignItems: "center",
             }}
-            onClick={(event) =>
-              event.stopPropagation()
-            }
-            onMouseDown={(event) =>
-              event.stopPropagation()
-            }
-            onPointerDown={(event) =>
-              event.stopPropagation()
-            }
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
           >
             <DatePicker
               size="small"
@@ -226,9 +197,7 @@ const SortableSubItem = React.memo(
               type="number"
               style={{ width: 50 }}
               value={dateStep}
-              onChange={(event) =>
-                setDateStep(event.target.value)
-              }
+              onChange={(event) => setDateStep(event.target.value)}
             />
 
             <Button
@@ -239,10 +208,7 @@ const SortableSubItem = React.memo(
               onClick={(event) => {
                 event.stopPropagation();
 
-                onAssignDate(
-                  assignDate,
-                  dateStep,
-                );
+                onAssignDate(assignDate, dateStep);
               }}
             />
           </div>
@@ -264,13 +230,8 @@ const SortableSubItem = React.memo(
     ];
 
     const displayWeight =
-      item.weight != null &&
-      Number.isFinite(Number(item.weight))
-        ? Math.round(
-            (Number(item.weight) +
-              Number.EPSILON) *
-              100,
-          ) / 100
+      item.weight != null && Number.isFinite(Number(item.weight))
+        ? Math.round((Number(item.weight) + Number.EPSILON) * 100) / 100
         : null;
 
     const displayDate = getObjectDate(item);
@@ -306,9 +267,7 @@ const SortableSubItem = React.memo(
                 cursor: "grab",
                 flexShrink: 0,
               }}
-              onClick={(event) =>
-                event.stopPropagation()
-              }
+              onClick={(event) => event.stopPropagation()}
             >
               {icon}
             </span>
@@ -332,13 +291,9 @@ const SortableSubItem = React.memo(
 
               {item.asmPos || item.id}
 
-              {item.positionCode
-                ? ` [${item.positionCode}]`
-                : ""}
+              {item.positionCode ? ` [${item.positionCode}]` : ""}
 
-              {displayWeight != null
-                ? ` (${displayWeight} kg)`
-                : ""}
+              {displayWeight != null ? ` (${displayWeight} kg)` : ""}
             </strong>
 
             <div style={{ flex: 1 }} />
@@ -366,29 +321,20 @@ const SortableSubItem = React.memo(
   },
 );
 
-const SequenceObjectCollapse = ({
-  subPlan,
-  activeSimulationItem,
-}) => {
+const SequenceObjectCollapse = ({ subPlan, activeSimulationItem, displayIndexMap}) => {
   const dispatch = useDispatch();
 
   const sequenceObjects = useSelector(
-    (state) =>
-      state.sequence.sequenceObjects || [],
+    (state) => state.sequence.sequenceObjects || [],
   );
 
-  const loading = useSelector(
-    (state) => state.sequence.pending,
-  );
+  const loading = useSelector((state) => state.sequence.pending);
 
-  const [selectedIds, setSelectedIds] =
-    useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
 
-  const [lastSelected, setLastSelected] =
-    useState(null);
+  const [lastSelected, setLastSelected] = useState(null);
 
-  const [focusedIndex, setFocusedIndex] =
-    useState(0);
+  const [focusedIndex, setFocusedIndex] = useState(0);
 
   const tcapiRef = useRef(null);
   const listRef = useRef(null);
@@ -396,10 +342,7 @@ const SequenceObjectCollapse = ({
   useEffect(() => {
     const connectApi = async () => {
       try {
-        tcapiRef.current =
-          await WorkspaceAPI.connect(
-            window.parent,
-          );
+        tcapiRef.current = await WorkspaceAPI.connect(window.parent);
       } catch (error) {
         console.error(error);
       }
@@ -417,16 +360,13 @@ const SequenceObjectCollapse = ({
   );
 
   const currentObjects = useMemo(() => {
-    const subPlanObjects =
-      sequenceObjects.find(
-        (group) =>
-          group &&
-          String(group.subPlanId) ===
-            String(subPlan.id),
-      );
+    const subPlanObjects = sequenceObjects.find(
+      (group) => group && String(group.subPlanId) === String(subPlan.id),
+    );
 
     return subPlanObjects?.objects || [];
   }, [sequenceObjects, subPlan.id]);
+
 
   /*
    * Đánh số theo ngày nhưng không thay đổi thứ tự
@@ -435,26 +375,22 @@ const SequenceObjectCollapse = ({
    * 15-07-2026: 1, 2, 3, 4
    * 18-07-2026: 1, 2
    */
-  const displayIndexMap = useMemo(() => {
+  const displayIndexMap1 = useMemo(() => {
     const dateCounters = new Map();
     const objectIndexes = new Map();
-
+    console.log(currentObjects)
     currentObjects.forEach((item) => {
-      const dateKey =
-        getObjectDate(item) || "NO_DATE";
+      const dateKey = getObjectDate(item) || "NO_DATE";
 
-      const nextIndex =
-        (dateCounters.get(dateKey) || 0) + 1;
+      const nextIndex = (dateCounters.get(dateKey) || 0) + 1;
 
       dateCounters.set(dateKey, nextIndex);
-      objectIndexes.set(
-        getObjectKey(item),
-        nextIndex,
-      );
+      objectIndexes.set(getObjectKey(item), nextIndex);
     });
 
     return objectIndexes;
   }, [currentObjects]);
+
 
   const items = useMemo(() => {
     const result = [];
@@ -463,15 +399,11 @@ const SequenceObjectCollapse = ({
       const objects = group.objects || [];
 
       objects.forEach((obj) => {
-        const runtimeId =
-          obj.id ||
-          obj.runtimeId ||
-          obj.objectRuntimeId;
+        const runtimeId = obj.id || obj.runtimeId || obj.objectRuntimeId;
 
         result.push({
           ...obj,
-          planId:
-            group.planId || group.id,
+          planId: group.planId || group.id,
           subPlanId: group.subPlanId,
           modelId: obj.modelId,
           id: runtimeId,
@@ -494,72 +426,51 @@ const SequenceObjectCollapse = ({
     [dispatch, subPlan.id],
   );
 
-  const selectObjectsInViewer = useCallback(
-    async (objects) => {
-      try {
-        const tcapi = tcapiRef.current;
+  const selectObjectsInViewer = useCallback(async (objects) => {
+    try {
+      const tcapi = tcapiRef.current;
 
-        if (!tcapi || !objects?.length) {
+      if (!tcapi || !objects?.length) {
+        return;
+      }
+
+      const modelGroups = new Map();
+
+      objects.forEach((item) => {
+        const runtimeId = item.id || item.runtimeId || item.objectRuntimeId;
+
+        if (!item.modelId || runtimeId == null) {
           return;
         }
 
-        const modelGroups = new Map();
+        const modelKey = String(item.modelId);
 
-        objects.forEach((item) => {
-          const runtimeId =
-            item.id ||
-            item.runtimeId ||
-            item.objectRuntimeId;
+        if (!modelGroups.has(modelKey)) {
+          modelGroups.set(modelKey, {
+            modelId: item.modelId,
+            objectRuntimeIds: [],
+          });
+        }
 
-          if (
-            !item.modelId ||
-            runtimeId == null
-          ) {
-            return;
-          }
+        modelGroups.get(modelKey).objectRuntimeIds.push(runtimeId);
+      });
 
-          const modelKey = String(
-            item.modelId,
-          );
-
-          if (!modelGroups.has(modelKey)) {
-            modelGroups.set(modelKey, {
-              modelId: item.modelId,
-              objectRuntimeIds: [],
-            });
-          }
-
-          modelGroups
-            .get(modelKey)
-            .objectRuntimeIds.push(runtimeId);
-        });
-
-        await tcapi.viewer.setSelection(
-          {
-            modelObjectIds: [
-              ...modelGroups.values(),
-            ],
-          },
-          "set",
-        );
-      } catch (error) {
-        console.error(error);
-      }
-    },
-    [],
-  );
+      await tcapi.viewer.setSelection(
+        {
+          modelObjectIds: [...modelGroups.values()],
+        },
+        "set",
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
 
   const changeIndex = useCallback(
     async (newIndex) => {
       if (!items.length) return;
 
-      const safeIndex = Math.max(
-        0,
-        Math.min(
-          newIndex,
-          items.length - 1,
-        ),
-      );
+      const safeIndex = Math.max(0, Math.min(newIndex, items.length - 1));
 
       const item = items[safeIndex];
 
@@ -574,43 +485,27 @@ const SequenceObjectCollapse = ({
 
       await selectObjectsInViewer([item]);
     },
-    [
-      items,
-      dispatch,
-      selectObjectsInViewer,
-    ],
+    [items, dispatch, selectObjectsInViewer],
   );
 
   const getCurrentIndex = useCallback(() => {
     if (activeSimulationItem) {
       return items.findIndex(
         (item) =>
-          String(item.subPlanId) ===
-            String(
-              activeSimulationItem.subPlanId,
-            ) &&
-          String(item.modelId) ===
-            String(
-              activeSimulationItem.modelId,
-            ) &&
-          String(item.id) ===
-            String(activeSimulationItem.id),
+          String(item.subPlanId) === String(activeSimulationItem.subPlanId) &&
+          String(item.modelId) === String(activeSimulationItem.modelId) &&
+          String(item.id) === String(activeSimulationItem.id),
       );
     }
 
-    const currentItem =
-      selectedIds[0] ||
-      currentObjects[focusedIndex];
+    const currentItem = selectedIds[0] || currentObjects[focusedIndex];
 
     if (!currentItem) return -1;
 
     return items.findIndex(
       (item) =>
         String(item.subPlanId) ===
-          String(
-            currentItem.subPlanId ||
-              subPlan.id,
-          ) &&
+          String(currentItem.subPlanId || subPlan.id) &&
         isSameObject(item, currentItem),
     );
   }, [
@@ -646,16 +541,12 @@ const SequenceObjectCollapse = ({
 
   const setActiveItem = useCallback(
     (item) => {
-      const runtimeId =
-        item.id ||
-        item.runtimeId ||
-        item.objectRuntimeId;
+      const runtimeId = item.id || item.runtimeId || item.objectRuntimeId;
 
       dispatch(
         SetActiveSimulationItem({
           planId: item.planId,
-          subPlanId:
-            item.subPlanId || subPlan.id,
+          subPlanId: item.subPlanId || subPlan.id,
           modelId: item.modelId,
           id: runtimeId,
         }),
@@ -665,37 +556,20 @@ const SequenceObjectCollapse = ({
   );
 
   useEffect(() => {
-    if (
-      !activeSimulationItem ||
-      !currentObjects.length
-    ) {
+    if (!activeSimulationItem || !currentObjects.length) {
       return;
     }
 
-    if (
-      String(
-        activeSimulationItem.subPlanId,
-      ) !== String(subPlan.id)
-    ) {
+    if (String(activeSimulationItem.subPlanId) !== String(subPlan.id)) {
       return;
     }
 
-    const index =
-      currentObjects.findIndex(
-        (item) =>
-          String(item.modelId) ===
-            String(
-              activeSimulationItem.modelId,
-            ) &&
-          String(
-            item.id ||
-              item.runtimeId ||
-              item.objectRuntimeId,
-          ) ===
-            String(
-              activeSimulationItem.id,
-            ),
-      );
+    const index = currentObjects.findIndex(
+      (item) =>
+        String(item.modelId) === String(activeSimulationItem.modelId) &&
+        String(item.id || item.runtimeId || item.objectRuntimeId) ===
+          String(activeSimulationItem.id),
+    );
 
     if (index === -1) return;
 
@@ -708,12 +582,9 @@ const SequenceObjectCollapse = ({
     const timeoutId = setTimeout(() => {
       listRef.current?.focus();
 
-      const element =
-        listRef.current?.querySelector(
-          `[data-object-key="${getObjectKey(
-            item,
-          )}"]`,
-        );
+      const element = listRef.current?.querySelector(
+        `[data-object-key="${getObjectKey(item)}"]`,
+      );
 
       element?.scrollIntoView({
         behavior: "smooth",
@@ -722,18 +593,11 @@ const SequenceObjectCollapse = ({
     }, 150);
 
     return () => clearTimeout(timeoutId);
-  }, [
-    activeSimulationItem,
-    currentObjects,
-    subPlan.id,
-  ]);
+  }, [activeSimulationItem, currentObjects, subPlan.id]);
 
   const handleKeyDown = useCallback(
     (event) => {
-      if (
-        event.key !== "ArrowDown" &&
-        event.key !== "ArrowUp"
-      ) {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
         return;
       }
 
@@ -753,37 +617,23 @@ const SequenceObjectCollapse = ({
     (event) => {
       const { active, over } = event;
 
-      if (
-        !over ||
-        active.id === over.id
-      ) {
+      if (!over || active.id === over.id) {
         return;
       }
 
-      const oldIndex =
-        currentObjects.findIndex(
-          (item) =>
-            getObjectKey(item) === active.id,
-        );
-
-      const newIndex =
-        currentObjects.findIndex(
-          (item) =>
-            getObjectKey(item) === over.id,
-        );
-
-      if (
-        oldIndex < 0 ||
-        newIndex < 0
-      ) {
-        return;
-      }
-
-      const reordered = arrayMove(
-        currentObjects,
-        oldIndex,
-        newIndex,
+      const oldIndex = currentObjects.findIndex(
+        (item) => getObjectKey(item) === active.id,
       );
+
+      const newIndex = currentObjects.findIndex(
+        (item) => getObjectKey(item) === over.id,
+      );
+
+      if (oldIndex < 0 || newIndex < 0) {
+        return;
+      }
+
+      const reordered = arrayMove(currentObjects, oldIndex, newIndex);
 
       updateObjects(reordered);
       setFocusedIndex(newIndex);
@@ -798,79 +648,51 @@ const SequenceObjectCollapse = ({
       const step = Number(dateStep) || 0;
 
       const selectedKeys = new Set(
-        selectedIds.map((item) =>
-          getObjectKey(item),
-        ),
+        selectedIds.map((item) => getObjectKey(item)),
       );
 
       let dateCount = 0;
 
-      const updated = currentObjects.map(
-        (obj) => {
-          const key = getObjectKey(obj);
+      const updated = currentObjects.map((obj) => {
+        const key = getObjectKey(obj);
 
-          if (!selectedKeys.has(key)) {
-            return obj;
-          }
+        if (!selectedKeys.has(key)) {
+          return obj;
+        }
 
-          const assignedDate = date
-            .add(dateCount, "day")
-            .format("DD-MM-YYYY");
+        const assignedDate = date.add(dateCount, "day").format("DD-MM-YYYY");
 
-          dateCount += step;
+        dateCount += step;
 
-          return {
-            ...obj,
-            date: assignedDate,
-          };
-        },
-      );
+        return {
+          ...obj,
+          date: assignedDate,
+        };
+      });
 
       updateObjects(updated);
     },
-    [
-      currentObjects,
-      selectedIds,
-      updateObjects,
-    ],
+    [currentObjects, selectedIds, updateObjects],
   );
 
   const handleDelete = useCallback(
     (item) => {
-      const updated =
-        currentObjects.filter(
-          (obj) =>
-            !isSameObject(obj, item),
-        );
+      const updated = currentObjects.filter((obj) => !isSameObject(obj, item));
 
       updateObjects(updated);
 
       setSelectedIds((previous) =>
-        previous.filter(
-          (selected) =>
-            !isSameObject(
-              selected,
-              item,
-            ),
-        ),
+        previous.filter((selected) => !isSameObject(selected, item)),
       );
 
       setLastSelected((previous) =>
-        isSameObject(previous, item)
-          ? null
-          : previous,
+        isSameObject(previous, item) ? null : previous,
       );
 
       setFocusedIndex((previous) => {
         if (!updated.length) return -1;
 
-        return Math.max(
-          0,
-          Math.min(
-            previous,
-            updated.length - 1,
-          ),
-        );
+        return Math.max(0, Math.min(previous, updated.length - 1));
       });
     },
     [currentObjects, updateObjects],
@@ -882,27 +704,14 @@ const SequenceObjectCollapse = ({
       return;
     }
 
-    if (
-      focusedIndex >
-      currentObjects.length - 1
-    ) {
-      setFocusedIndex(
-        currentObjects.length - 1,
-      );
+    if (focusedIndex > currentObjects.length - 1) {
+      setFocusedIndex(currentObjects.length - 1);
     }
-  }, [
-    currentObjects.length,
-    focusedIndex,
-  ]);
+  }, [currentObjects.length, focusedIndex]);
 
   if (!currentObjects.length) {
     return (
-      <Empty
-        image={
-          Empty.PRESENTED_IMAGE_SIMPLE
-        }
-        description="No Objects"
-      />
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No Objects" />
     );
   }
 
@@ -913,12 +722,8 @@ const SequenceObjectCollapse = ({
       onDragEnd={onDragEndSubItem}
     >
       <SortableContext
-        items={currentObjects.map((item) =>
-          getObjectKey(item),
-        )}
-        strategy={
-          verticalListSortingStrategy
-        }
+        items={currentObjects.map((item) => getObjectKey(item))}
+        strategy={verticalListSortingStrategy}
       >
         <div
           ref={listRef}
@@ -941,36 +746,18 @@ const SequenceObjectCollapse = ({
               <SortableSubItem
                 key={getObjectKey(item)}
                 item={item}
-                displayIndex={
-                  displayIndexMap.get(
-                    getObjectKey(item),
-                  ) || 1
-                }
+                displayIndex={displayIndexMap.get(getObjectKey(item)) || 1}
                 selectedIds={selectedIds}
-                setSelectedIds={
-                  setSelectedIds
-                }
+                setSelectedIds={setSelectedIds}
                 lastSelected={lastSelected}
-                setLastSelected={
-                  setLastSelected
-                }
-                setFocusedIndex={
-                  setFocusedIndex
-                }
-                currentObjects={
-                  currentObjects
-                }
+                setLastSelected={setLastSelected}
+                setFocusedIndex={setFocusedIndex}
+                currentObjects={currentObjects}
                 icon={<FileOutlined />}
-                onAssignDate={
-                  handleAssignDate
-                }
+                onAssignDate={handleAssignDate}
                 onDelete={handleDelete}
-                selectObjectsInViewer={
-                  selectObjectsInViewer
-                }
-                setActiveItem={
-                  setActiveItem
-                }
+                selectObjectsInViewer={selectObjectsInViewer}
+                setActiveItem={setActiveItem}
                 listRef={listRef}
               />
             )}

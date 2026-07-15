@@ -50,6 +50,7 @@ const reducers = (state = initialState, action) => {
           : [],
       };
     case type.SET_SIMULATION_DATE_RANGE:
+      console.log(action.payload)
       return {
         ...state,
         startDate: action.payload.startDate,
@@ -187,27 +188,45 @@ const reducers = (state = initialState, action) => {
           : state.sequenceObjects,
       };
 
+    // case type.SET_OBJECTS_SUCCESS: {
+    //   const subPlanId = action.payload?.subPlanId;
+    //   const newObjects = action.payload?.objects ?? [];
+
+    //   const otherSequenceObjects = state.sequenceObjects.filter(
+    //     (x) => x?.subPlanId !== subPlanId,
+    //   );
+
+    //   console.log("otherSequenceObjects", otherSequenceObjects);
+    //   console.log("newObjects", newObjects);
+
+    //   return {
+    //     ...state,
+    //     pending: false,
+    //     sequenceObjects: [
+    //       ...otherSequenceObjects,
+    //       {
+    //         subPlanId,
+    //         objects: newObjects,
+    //       },
+    //     ],
+    //   };
+    // }
+
     case type.SET_OBJECTS_SUCCESS: {
       const subPlanId = action.payload?.subPlanId;
       const newObjects = action.payload?.objects ?? [];
 
-      const otherSequenceObjects = state.sequenceObjects.filter(
-        (x) => x?.subPlanId !== subPlanId,
-      );
-
-      console.log("otherSequenceObjects", otherSequenceObjects);
-      console.log("newObjects", newObjects);
-
       return {
         ...state,
         pending: false,
-        sequenceObjects: [
-          ...otherSequenceObjects,
-          {
-            subPlanId,
-            objects: newObjects,
-          },
-        ],
+        sequenceObjects: state.sequenceObjects.map((group) =>
+          group?.subPlanId === subPlanId
+            ? {
+                ...group,
+                objects: newObjects,
+              }
+            : group,
+        ),
       };
     }
 

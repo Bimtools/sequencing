@@ -350,8 +350,8 @@ export default function Simulation() {
             setStartDate(date);
             dispatch(
               SetSimulationDateRange({
-                startDate: dates?.[0]?.format("YYYY-MM-DD") || null,
-                endDate: dates?.[1]?.format("YYYY-MM-DD") || null,
+                startDate: date ? date.format("DD-MM-YYYY") : null,
+                endDate: endDate ? endDate.format("DD-MM-YYYY") : null,
               }),
             );
           }}
@@ -366,8 +366,8 @@ export default function Simulation() {
             setEndDate(date);
             dispatch(
               SetSimulationDateRange({
-                startDate: dates?.[0]?.format("YYYY-MM-DD") || null,
-                endDate: dates?.[1]?.format("YYYY-MM-DD") || null,
+                startDate: startDate ? startDate.format("DD-MM-YYYY") : null,
+                endDate: date ? date.format("DD-MM-YYYY") : null,
               }),
             );
           }}
