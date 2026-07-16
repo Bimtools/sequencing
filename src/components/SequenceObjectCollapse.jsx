@@ -286,7 +286,7 @@ const SortableSubItem = React.memo(
                   minWidth: 24,
                 }}
               >
-                {displayIndex}.
+                {`${displayIndex}: `}
               </span>
 
               {item.asmPos || item.id}

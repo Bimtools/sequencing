@@ -533,18 +533,19 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
     const objectIndexes = new Map();
 
     sequenceObjects.forEach((group) => {
-      (group.objects || []).forEach((item) => {
+      (group.objects || []).forEach((item, index) => {
         const dateKey = getObjectDate(item) || "NO_DATE";
 
-        const nextIndex = (dateCounters.get(dateKey) || 0) + 1;
+        const dateIndex = (dateCounters.get(dateKey) || 0) + 1;
 
-        dateCounters.set(dateKey, nextIndex);
-        objectIndexes.set(getObjectKey(item), nextIndex);
+        dateCounters.set(dateKey, dateIndex);
+
+        objectIndexes.set(getObjectKey(item), `${index + 1}-${dateIndex}`);
       });
     });
 
     return objectIndexes;
-  }, [sequenceObjects, plan.id, subPlans ]);
+  }, [sequenceObjects, plan.id, subPlans]);
 
   useEffect(() => {
     return () => {
