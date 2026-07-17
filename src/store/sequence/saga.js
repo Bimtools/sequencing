@@ -82,7 +82,7 @@ function* getPlansSaga(action) {
       projectName,
     });
     const getFolderUrl = `/folders/by_path?path=${encodeURIComponent(action.payload.projectName)}&projectId=${action.payload.projectId}`;
-    console.log(getFolderUrl);
+   
     const response = yield call(instance.get, getFolderUrl);
 
     const folders = response.data.filter((x) => x.name === "Sequence");
@@ -641,7 +641,7 @@ function* setObjectsSaga(action) {
 }
 
 function* getOrCreateTemplateFolder({ projectId, projectName }) {
-  const getFolderUrl = `/folders/by_path?path=${projectName}&projectId=${projectId}`;
+  const getFolderUrl = `/folders/by_path?path=${encodeURIComponent(projectName)}&projectId=${projectId}`;
   const response = yield call(instance.get, getFolderUrl);
 
   const templateFolder = response.data.find(
