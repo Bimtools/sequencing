@@ -20,6 +20,22 @@ export default function App() {
       const token = await tcapi.extension.requestPermission("accesstoken");
       window.localStorage.setItem("trimbleToken", token);
       const project = await tcapi.project.getProject();
+      const location = project.location.toUpperCase();
+      let apiurl = "https://app.connect.trimble.com/tc/api/2.0";
+      if (location.includes("AUSTRALIA")) {
+        apiurl = "https://app32.connect.trimble.com/tc/api/2.0";
+      } else if (location.includes("EUROPE") || location.includes("EU")) {
+        apiurl = "https://app21.connect.trimble.com/tc/api/2.0";
+      } else if (location.includes("ASIA")) {
+        apiurl = "https://app31.connect.trimble.com/tc/api/2.0";
+      } else if (
+        location.includes("UK") ||
+        location.includes("UNITED") ||
+        location.includes("KINGDOM")
+      ) {
+        apiurl = "https://app22.connect.trimble.com/tc/api/2.0";
+      }
+      window.localStorage.setItem("apiurl", apiurl);
       setProjectId(project.id);
       setProjectName(project.name);
       dispatch(

@@ -8,7 +8,7 @@ function getLocalToken() {
 }
 
 const instance = axios.create({
-  baseURL: process.env.REACT_APP_TC_URL,
+  baseURL: localStorage.getItem("apiurl"),
   headers: {
     "Content-Type": "application/json",
   },
@@ -24,7 +24,7 @@ instance.interceptors.request.use(
     const token = getLocalToken();
     if (token) {
       request.headers["Authorization"] = "Bearer " + token;
-      request.baseURL = process.env.REACT_APP_TC_URL;
+      request.baseURL = localStorage.getItem("apiurl");
     }
     return request;
   },
@@ -49,7 +49,7 @@ instance.interceptors.response.use(
           window.localStorage.setItem("trimbleToken", token);
           const retryConfig = { ...error.config };
           retryConfig.headers["Authorization"] = "Bearer " + token;
-          retryConfig.baseURL = process.env.REACT_APP_TC_URL;
+          retryConfig.baseURL = localStorage.getItem("apiurl")
 
           return instance(retryConfig);
         }
