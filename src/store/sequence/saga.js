@@ -81,7 +81,8 @@ function* getPlansSaga(action) {
       projectId,
       projectName,
     });
-    const getFolderUrl = `/folders/by_path?path=${action.payload.projectName}&projectId=${action.payload.projectId}`;
+    const getFolderUrl = `/folders/by_path?path=${encodeURIComponent(action.payload.projectName)}&projectId=${action.payload.projectId}`;
+    console.log(getFolderUrl);
     const response = yield call(instance.get, getFolderUrl);
 
     const folders = response.data.filter((x) => x.name === "Sequence");
@@ -340,7 +341,7 @@ function* deletePlanSaga(action) {
       yield put(
         DeletePlanSuccess({
           plans: [...newPlans],
-          deletedPlanId: action.payload.folderId
+          deletedPlanId: action.payload.folderId,
         }),
       );
     } else {
@@ -862,10 +863,7 @@ function buildGroupsFromSequenceObjects(plans = [], sequenceObjects = []) {
 
       return {
         name: plan?.name || "",
-        date:
-          group.objects[0]?.date ||
-          group.objects[0]?.assignedDate ||
-          "",
+        date: group.objects[0]?.date || group.objects[0]?.assignedDate || "",
         items: group.objects.map((obj) => ({
           AsmName: obj.name || obj.asmName || "",
           AsmPos: obj.asmPos || "",
@@ -878,7 +876,6 @@ function buildGroupsFromSequenceObjects(plans = [], sequenceObjects = []) {
       };
     });
 }
-
 
 function* getTemplateFile(templateFolderId) {
   const res = yield call(instance.get, `/folders/${templateFolderId}/contents`);
