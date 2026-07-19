@@ -54,7 +54,7 @@ export default function App() {
         overflow: "hidden",
       }}
     >
-      <TopMenu />
+      <TopMenu  projectName={projectName}/>
 
       <Content
         style={{

@@ -103,6 +103,7 @@ const SubPlanModal = ({
         title="Color"
         open={colorDialog}
         footer={null}
+        width="fit-content"
         onCancel={() => setColorDialog(false)}
       >
         <Colorpicker value={color} onChange={setColor} />

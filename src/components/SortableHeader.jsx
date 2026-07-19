@@ -13,6 +13,7 @@ import {
   PlusOutlined,
   CopyOutlined,
   SortAscendingOutlined,
+  SelectOutlined,
 } from "@ant-design/icons";
 
 const SortableHeader = ({
@@ -24,6 +25,7 @@ const SortableHeader = ({
   onAutoAssign,
   onCopySubPlan,
   onSortByDate,
+  onHighlightObject,
 }) => {
   const phaseCommentId = useSelector((state) => state.sequence.phaseCommentId);
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
@@ -83,6 +85,23 @@ const SortableHeader = ({
           }}
         >
           Assign Picked Assemblies In Order
+        </Button>
+      ),
+    },
+    onHighlightObject && {
+      key: "highlightObject",
+      label: (
+        <Button
+          size="small"
+          type="text"
+          icon={<SelectOutlined />}
+          onClick={(e) => {
+            e.stopPropagation();
+            closeDropdown();
+            onHighlightObject?.(plan);
+          }}
+        >
+          Highlight
         </Button>
       ),
     },

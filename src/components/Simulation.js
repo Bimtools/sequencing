@@ -1,23 +1,34 @@
-import { Button, Slider, Space, DatePicker } from "antd";
+import { Button, DatePicker, Select, Slider, Space } from "antd";
+
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
+
 import {
   StepBackwardOutlined,
   StepForwardOutlined,
   PlayCircleOutlined,
   PauseCircleOutlined,
 } from "@ant-design/icons";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSelector, useDispatch } from "react-redux";
+
+import { useDispatch, useSelector } from "react-redux";
+
 import * as WorkspaceAPI from "trimble-connect-workspace-api";
+
 import {
   SetActiveSimulationItem,
   SetSimulationDateRange,
 } from "../store/sequence/action";
 
 dayjs.extend(customParseFormat);
+
+const DATE_FORMATS = ["DD-MM-YYYY", "DD/MM/YYYY", "YYYY-MM-DD", "YYYY/MM/DD"];
+
 export default function Simulation() {
   const dispatch = useDispatch();
+
+  const plans = useSelector((state) => state.sequence.plans || []);
 
   const sequenceObjects = useSelector(
     (state) => state.sequence.sequenceObjects || [],
@@ -28,77 +39,140 @@ export default function Simulation() {
   const tcapiRef = useRef(null);
   const intervalRef = useRef(null);
 
-  const dates = useMemo(() => {
-    const dateSet = new Set();
-
-    sequenceObjects.forEach((group) => {
-      (group.objects || []).forEach((obj) => {
-        const date = obj.assignedDate || obj.date;
-        if (date) {
-          dateSet.add(date);
-        }
-      });
-    });
-
-    return [...dateSet].sort(
-      (a, b) =>
-        dayjs(a, "DD-MM-YYYY").valueOf() - dayjs(b, "DD-MM-YYYY").valueOf(),
-    );
-  }, [sequenceObjects]);
-
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+
   const [delay, setDelay] = useState(200);
-  const [range, setRange] = useState([0, 0]);
+
+  const [selectedPlanIds, setSelectedPlanIds] = useState([]);
+
   const [startDate, setStartDate] = useState(null);
+
   const [endDate, setEndDate] = useState(null);
 
-  useEffect(() => {
-    if (dates.length) {
-      setRange([0, dates.length - 1]);
-    }
-  }, [dates]);
+  // =====================================================
+  // DATE PARSER
+  // =====================================================
 
-  // const startDate = dates[range[0]];
-  // const endDate = dates[range[1]];
+  const parseDate = useCallback((value) => {
+    if (!value) return null;
+
+    if (dayjs.isDayjs(value)) {
+      return value.isValid() ? value : null;
+    }
+
+    const strictDate = dayjs(value, DATE_FORMATS, true);
+
+    if (strictDate.isValid()) {
+      return strictDate;
+    }
+
+    const normalDate = dayjs(value);
+
+    return normalDate.isValid() ? normalDate : null;
+  }, []);
+
+  // =====================================================
+  // DEFAULT SELECT ALL PLANS
+  // =====================================================
+
+  useEffect(() => {
+    const validPlanIds = plans.map((plan) => String(plan.id));
+
+    setSelectedPlanIds((current) => {
+      /*
+       * Firt load:
+       * Select All Plans.
+       */
+      if (!current.length) {
+        return validPlanIds;
+      }
+
+      /*
+       * Remove deleted plan.
+       */
+      const existingSelectedIds = current.filter((id) =>
+        validPlanIds.includes(String(id)),
+      );
+
+      /*
+       Reselect all plan
+       */
+      if (!existingSelectedIds.length) {
+        return validPlanIds;
+      }
+
+      return existingSelectedIds;
+    });
+  }, [plans]);
+
+  // =====================================================
+  // BUILD ALL SIMULATION ITEMS
+  // =====================================================
 
   const allItems = useMemo(() => {
-    if (!sequenceObjects.length) return [];
+    if (!sequenceObjects.length) {
+      return [];
+    }
 
     const result = [];
     let originalIndex = 0;
 
     sequenceObjects.forEach((group, groupIndex) => {
+      if (!group) return;
+
+      const groupPlanId = String(group.planId || "");
+
+      const plan = plans.find((item) => String(item.id) === groupPlanId);
+
       const objects = group.objects || [];
 
       objects.forEach((obj, objectIndex) => {
         const runtimeId = obj.id || obj.runtimeId || obj.objectRuntimeId;
-        const planId = group.planId || group.id || obj.planId;
-        const subPlanId = group.subPlanId || obj.subPlanId;
+
+        const planId = String(group.planId || obj.planId || "");
+
+        const subPlanId = String(group.subPlanId || obj.subPlanId || "");
+
         const simulationDate = obj.assignedDate || obj.date;
+
+        const parsedDate = parseDate(simulationDate);
+
+        /*
+         Remove invalid object from plan
+         */
+        if (!parsedDate) {
+          return;
+        }
 
         result.push({
           ...obj,
-          planId: String(planId),
-          subPlanId: String(subPlanId),
+
+          planId,
+          subPlanId,
+
           groupIndex,
           objectIndex,
+
           originalIndex: originalIndex++,
-          planName:
-            group.name ||
-            group.planName ||
-            group.subPlanName ||
-            `Plan ${groupIndex + 1}`,
+
+          planName: plan?.name || group.planName || `Plan ${groupIndex + 1}`,
+
           name:
             obj.asmPos ||
             obj.name ||
             obj.objectName ||
             `Object ${objectIndex + 1}`,
-          modelId: obj.modelId,
+
+          modelId: obj.modelId || group.modelId,
+
           runtimeId,
+
           id: String(runtimeId),
-          simulationDate,
-          simulationTime: dayjs(simulationDate, "DD-MM-YYYY").valueOf(),
+
+          simulationDate: parsedDate.format("DD-MM-YYYY"),
+
+          simulationTime: parsedDate.valueOf(),
         });
       });
     });
@@ -107,35 +181,96 @@ export default function Simulation() {
       if (a.simulationTime !== b.simulationTime) {
         return a.simulationTime - b.simulationTime;
       }
+
       return a.originalIndex - b.originalIndex;
     });
-  }, [sequenceObjects]);
+  }, [sequenceObjects, plans, parseDate]);
+
+  // =====================================================
+  // FILTER BY PLAN + START DATE + END DATE
+  // =====================================================
 
   const items = useMemo(() => {
-    const filtered = allItems.filter((item) => {
-      if (!startDate || !endDate) return true;
-      if (!item.simulationDate) return false;
-      const simulationDate = dayjs(item.simulationDate, "DD-MM-YYYY");
+    const selectedPlanSet = new Set(selectedPlanIds.map((id) => String(id)));
 
-      return simulationDate >= startDate && simulationDate <= endDate;
+    const start = startDate ? dayjs(startDate).startOf("day") : null;
+
+    const end = endDate ? dayjs(endDate).endOf("day") : null;
+
+    const filtered = allItems.filter((item) => {
+      if (!selectedPlanSet.has(String(item.planId))) {
+        return false;
+      }
+
+      const itemDate = parseDate(item.simulationDate);
+
+      if (!itemDate) {
+        return false;
+      }
+
+      if (start && itemDate.isBefore(start, "day")) {
+        return false;
+      }
+
+      if (end && itemDate.isAfter(end, "day")) {
+        return false;
+      }
+
+      return true;
     });
 
     return filtered.map((item, i) => ({
       ...item,
+
       value:
         filtered.length === 1
           ? 0
           : Math.round((i / (filtered.length - 1)) * 100),
     }));
-  }, [allItems, startDate, endDate]);
+  }, [allItems, selectedPlanIds, startDate, endDate, parseDate]);
 
   const current = items[index];
 
+  // =====================================================
+  // RESET SIMULATION WHEN FILTER CHANGES
+  // =====================================================
+
   useEffect(() => {
+    setPlaying(false);
+    setIndex(0);
+
+    clearInterval(intervalRef.current);
+  }, [selectedPlanIds, startDate, endDate]);
+
+  useEffect(() => {
+    if (!items.length) {
+      setIndex(0);
+      setPlaying(false);
+      return;
+    }
+
     if (index >= items.length) {
       setIndex(0);
     }
   }, [items.length, index]);
+
+  // =====================================================
+  // SAVE DATE RANGE TO REDUX
+  // =====================================================
+
+  useEffect(() => {
+    dispatch(
+      SetSimulationDateRange({
+        startDate: startDate ? startDate.format("DD-MM-YYYY") : null,
+
+        endDate: endDate ? endDate.format("DD-MM-YYYY") : null,
+      }),
+    );
+  }, [startDate, endDate, dispatch]);
+
+  // =====================================================
+  // TRIMBLE CONNECT API
+  // =====================================================
 
   const getTcapi = async () => {
     if (!tcapiRef.current) {
@@ -147,30 +282,35 @@ export default function Simulation() {
 
   const buildAccumulatedObjects = useCallback(
     (toIndex) => {
-      const grouped = [];
+      const modelMap = new Map();
 
       items.slice(0, toIndex + 1).forEach((item) => {
-        if (!item.modelId || !item.runtimeId) return;
+        if (!item.modelId || item.runtimeId == null) {
+          return;
+        }
 
-        const exist = grouped.find((x) => x.modelId === item.modelId);
+        const modelId = String(item.modelId);
 
-        if (exist) {
-          exist.entityIds.push(item.runtimeId);
-        } else {
-          grouped.push({
+        if (!modelMap.has(modelId)) {
+          modelMap.set(modelId, {
             modelId: item.modelId,
-            entityIds: [item.runtimeId],
+
+            entityIds: [],
           });
         }
+
+        modelMap.get(modelId).entityIds.push(item.runtimeId);
       });
 
-      return grouped;
+      return Array.from(modelMap.values());
     },
     [items],
   );
 
   const selectObjectInTrimble = async (item) => {
-    if (!item?.modelId || !item?.runtimeId) return;
+    if (!item?.modelId || item?.runtimeId == null) {
+      return;
+    }
 
     const tcapi = await getTcapi();
 
@@ -179,6 +319,7 @@ export default function Simulation() {
         modelObjectIds: [
           {
             modelId: item.modelId,
+
             objectRuntimeIds: [item.runtimeId],
           },
         ],
@@ -188,13 +329,17 @@ export default function Simulation() {
   };
 
   const colorObjectInTrimble = async (item) => {
-    if (!item?.modelId || !item?.runtimeId) return;
+    if (!item?.modelId || item?.runtimeId == null) {
+      return;
+    }
 
     const subPlan = subPlans.find(
-      (x) => String(x.id) === String(item.subPlanId),
+      (subPlanItem) => String(subPlanItem.id) === String(item.subPlanId),
     );
 
-    if (!subPlan?.color) return;
+    if (!subPlan?.color) {
+      return;
+    }
 
     const tcapi = await getTcapi();
 
@@ -203,6 +348,7 @@ export default function Simulation() {
         modelObjectIds: [
           {
             modelId: item.modelId,
+
             objectRuntimeIds: [item.runtimeId],
           },
         ],
@@ -213,59 +359,83 @@ export default function Simulation() {
           g: subPlan.color.g,
           b: subPlan.color.b,
         },
+
         visible: true,
       },
     );
   };
 
   const isolateObjectsInTrimble = async (objects) => {
-    if (!objects?.length) return;
+    if (!objects?.length) {
+      return;
+    }
 
     const tcapi = await getTcapi();
 
     await tcapi.viewer.isolateEntities(objects);
   };
 
+  // =====================================================
+  // NAVIGATION
+  // =====================================================
+
   const goToIndex = useCallback(
     async (newIndex) => {
       if (!items.length) return;
 
       const safeIndex = Math.max(0, Math.min(newIndex, items.length - 1));
+
       const item = items[safeIndex];
+
+      if (!item) return;
 
       setIndex(safeIndex);
 
       dispatch(
         SetActiveSimulationItem({
           planId: String(item.planId),
+
           subPlanId: String(item.subPlanId),
+
           modelId: item.modelId,
+
           id: String(item.id),
+
           runtimeId: item.runtimeId,
         }),
       );
 
-      const accumulatedObjects = buildAccumulatedObjects(safeIndex);
+      try {
+        const accumulatedObjects = buildAccumulatedObjects(safeIndex);
 
-      await isolateObjectsInTrimble(accumulatedObjects);
-      await colorObjectInTrimble(item);
-      await selectObjectInTrimble(item);
+        await isolateObjectsInTrimble(accumulatedObjects);
+
+        await colorObjectInTrimble(item);
+
+        await selectObjectInTrimble(item);
+      } catch (error) {
+        console.error("Simulation viewer error:", error);
+      }
     },
     [items, dispatch, buildAccumulatedObjects, subPlans],
   );
 
   const next = () => {
     setPlaying(false);
+
     goToIndex(index + 1);
   };
 
   const prev = () => {
     setPlaying(false);
+
     goToIndex(index - 1);
   };
 
   const togglePlay = async () => {
-    if (!items.length) return;
+    if (!items.length) {
+      return;
+    }
 
     if (!playing) {
       if (index >= items.length - 1) {
@@ -275,12 +445,17 @@ export default function Simulation() {
       }
     }
 
-    setPlaying((prev) => !prev);
+    setPlaying((currentPlaying) => !currentPlaying);
   };
+
+  // =====================================================
+  // AUTO PLAY
+  // =====================================================
 
   useEffect(() => {
     if (!playing || !items.length) {
       clearInterval(intervalRef.current);
+
       return;
     }
 
@@ -289,6 +464,7 @@ export default function Simulation() {
 
       if (nextIndex >= items.length) {
         clearInterval(intervalRef.current);
+
         setPlaying(false);
         return;
       }
@@ -296,7 +472,9 @@ export default function Simulation() {
       goToIndex(nextIndex);
     }, delay);
 
-    return () => clearInterval(intervalRef.current);
+    return () => {
+      clearInterval(intervalRef.current);
+    };
   }, [playing, delay, index, items.length, goToIndex]);
 
   useEffect(() => {
@@ -305,142 +483,222 @@ export default function Simulation() {
     };
   }, []);
 
-  const marks = items.reduce((acc, item, i) => {
-    acc[item.value] = {
-      label: (
-        <div
-          onClick={() => {
-            setPlaying(false);
-            goToIndex(i);
-          }}
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            cursor: "pointer",
-          }}
-        />
-      ),
-    };
+  // =====================================================
+  // SLIDER MARKS
+  // =====================================================
 
-    return acc;
-  }, {});
+  const marks = useMemo(() => {
+    return items.reduce((result, item, itemIndex) => {
+      result[item.value] = {
+        label: (
+          <div
+            onClick={() => {
+              setPlaying(false);
+
+              goToIndex(itemIndex);
+            }}
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              cursor: "pointer",
+            }}
+          />
+        ),
+      };
+
+      return result;
+    }, {});
+  }, [items, goToIndex]);
+
+  // =====================================================
+  // FILTER HANDLERS
+  // =====================================================
+
+  const handlePlanChange = (values) => {
+    setPlaying(false);
+    setIndex(0);
+
+    setSelectedPlanIds(values || []);
+  };
+
+  const handleStartDateChange = (date) => {
+    setPlaying(false);
+    setIndex(0);
+
+    setStartDate(date);
+
+    /*
+     * If Start Date > End Date,
+     * Delete End Date.
+     */
+    if (date && endDate && date.isAfter(endDate, "day")) {
+      setEndDate(null);
+    }
+  };
+
+  const handleEndDateChange = (date) => {
+    setPlaying(false);
+    setIndex(0);
+
+    setEndDate(date);
+
+    /*
+     * If End Date < Start Date,
+     * Delete Start Date.
+     */
+    if (date && startDate && date.isBefore(startDate, "day")) {
+      setStartDate(null);
+    }
+  };
+
+  // =====================================================
+  // EMPTY DATA
+  // =====================================================
 
   if (!allItems.length) {
     return <div>There is no simulation data available</div>;
   }
 
+  // =====================================================
+  // JSX
+  // =====================================================
+
   return (
     <div style={{ width: "100%" }}>
+      {/* FILTERS */}
       <div
         style={{
           width: "100%",
-          display: "flex",
-          justifyContent: "space-between",
-          columnGap: 8,
           marginBottom: 24,
         }}
       >
-        <DatePicker
-          size="small"
-          format="DD-MM-YYYY"
-          placeholder="Start Date"
-          value={startDate}
-          onChange={(date) => {
-            setStartDate(date);
-            dispatch(
-              SetSimulationDateRange({
-                startDate: date ? date.format("DD-MM-YYYY") : null,
-                endDate: endDate ? endDate.format("DD-MM-YYYY") : null,
-              }),
-            );
+        {/* PLAN */}
+        <div
+          style={{
+            width: "100%",
+            marginBottom: 8,
           }}
-        />
+        >
+          <Select
+            mode="multiple"
+            size="small"
+            allowClear
+            showSearch
+            maxTagCount="responsive"
+            value={selectedPlanIds}
+            placeholder="Select plans"
+            optionFilterProp="label"
+            onChange={handlePlanChange}
+            style={{ width: "100%" }}
+            options={plans.map((plan) => ({
+              value: String(plan.id),
+              label: plan.name || "Unnamed Plan",
+            }))}
+          />
+        </div>
 
-        <DatePicker
-          size="small"
-          format="DD-MM-YYYY"
-          placeholder="End Date"
-          value={endDate}
-          onChange={(date) => {
-            setEndDate(date);
-            dispatch(
-              SetSimulationDateRange({
-                startDate: startDate ? startDate.format("DD-MM-YYYY") : null,
-                endDate: date ? date.format("DD-MM-YYYY") : null,
-              }),
-            );
+        {/* DATE FILTERS */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 8,
+            width: "100%",
           }}
-        />
-        {/* <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                marginBottom: 8,
-              }}
-            >
-              Start: <b>{startDate || "-"}</b> - End: <b>{endDate || "-"}</b>
-            </div> */}
+        >
+          <DatePicker
+            size="small"
+            style={{ width: "100%" }}
+            format="DD-MM-YYYY"
+            placeholder="Start Date"
+            value={startDate}
+            onChange={handleStartDateChange}
+            disabledDate={(date) => {
+              if (!endDate) {
+                return false;
+              }
 
-        {/* <Slider
-              range
-              min={0}
-              max={Math.max(dates.length - 1, 0)}
-              step={1}
-              dots
-              value={range}
-              disabled={!dates.length}
-              onChange={(value) => {
-                setPlaying(false);
-                setIndex(0);
-                setRange(value);
-              }}
-              tooltip={{
-                formatter: (value) => dates[value],
-              }}
-            /> */}
+              return date.isAfter(endDate, "day");
+            }}
+          />
+
+          <DatePicker
+            size="small"
+            style={{ width: "100%" }}
+            format="DD-MM-YYYY"
+            placeholder="End Date"
+            value={endDate}
+            onChange={handleEndDateChange}
+            disabledDate={(date) => {
+              if (!startDate) {
+                return false;
+              }
+
+              return date.isBefore(startDate, "day");
+            }}
+          />
+        </div>
       </div>
-      {!items.length ? (
-        <div>No objects in selected date range</div>
+
+      {!selectedPlanIds.length ? (
+        <div>Please select at least one plan</div>
+      ) : !items.length ? (
+        <div>No objects match the selected plans and date range</div>
       ) : (
         <>
+          {/* CURRENT ITEM */}
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              gap: 12,
               marginBottom: 8,
               fontWeight: 600,
               fontSize: 16,
             }}
           >
-            <span>{`${current?.asmPos ?? ""} Grid: ${current?.positionCode}`}</span>
-            <span>{`${Number(Number(current?.weight || 0).toFixed(2))}kg`}</span>
+            <span>{current?.planName || "-"}</span>
+
+            <span>
+              {`${current?.asmPos ?? ""} Grid: ${current?.positionCode ?? ""}`}
+            </span>
+
+            <span>
+              {`${Number(Number(current?.weight || 0).toFixed(2))}kg`}
+            </span>
 
             <span>{current?.simulationDate || "-"}</span>
           </div>
 
+          {/* SIMULATION SLIDER */}
           <Slider
             style={{ width: "100%" }}
             min={0}
             max={100}
-            value={current?.value}
+            value={current?.value ?? 0}
             marks={marks}
             tooltip={{ open: false }}
             onChange={(value) => {
-              const nearestIndex = items.reduce((best, item, i) => {
-                return Math.abs(item.value - value) <
-                  Math.abs(items[best].value - value)
-                  ? i
-                  : best;
-              }, 0);
+              const nearestIndex = items.reduce(
+                (bestIndex, item, itemIndex) => {
+                  const currentDistance = Math.abs(item.value - value);
+
+                  const bestDistance = Math.abs(items[bestIndex].value - value);
+
+                  return currentDistance < bestDistance ? itemIndex : bestIndex;
+                },
+                0,
+              );
 
               setPlaying(false);
+
               goToIndex(nearestIndex);
             }}
           />
 
+          {/* CONTROLS */}
           <div
             style={{
               display: "flex",
@@ -472,6 +730,7 @@ export default function Simulation() {
             </Space>
           </div>
 
+          {/* SPEED */}
           <div style={{ marginTop: 12 }}>
             <span>Timing: {delay} ms</span>
 

@@ -136,6 +136,31 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
 
       const newAddedSequenceObjects = [];
 
+      const createObjectKey = (modelId, objectId) =>
+        `${String(modelId)}::${String(objectId)}`;
+
+      /*
+       * Store all objects that have already been assigned.
+       * If you only want to check duplicates within the current
+       * Sub Plan, use `existingObjects` instead of `sequenceObjects`.
+       */
+      const existingObjectKeys = new Set();
+
+      sequenceObjects.forEach((group) => {
+        (group?.objects || []).forEach((obj) => {
+          if (obj?.modelId == null || obj?.id == null) {
+            return;
+          }
+
+          existingObjectKeys.add(createObjectKey(obj.modelId, obj.id));
+        });
+      });
+
+      /*
+       * Prevent duplicate objects within the current assignment.
+       */
+      const newObjectKeys = new Set();
+
       tcapi.viewer.activateTool("selection");
 
       for (const selection of selections) {
@@ -149,10 +174,30 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
           selection.objectRuntimeIds,
         );
 
-        tcapi.markup.removeMarkups(undefined);
+        await tcapi.markup.removeMarkups(undefined);
 
         for (let i = 0; i < objBoxes.length; i++) {
           const box = objBoxes[i];
+
+          const objectKey = createObjectKey(selection.modelId, box.id);
+
+          if (
+            existingObjectKeys.has(objectKey) ||
+            newObjectKeys.has(objectKey)
+          ) {
+            console.warn("Object has already been assigned:", {
+              modelId: selection.modelId,
+              id: box.id,
+            });
+
+            continue;
+          }
+
+          /*
+           * Mark the object immediately to avoid duplicates
+           * during the current assignment.
+           */
+          newObjectKeys.add(objectKey);
 
           const center = math.divide(
             math.add(
@@ -170,12 +215,9 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
             2,
           );
 
-          console.log(items[i]);
           const properties = items[i]?.properties || [];
-          let asmName = "";
-          if (items[i].product) {
-            asmName = items[i].product.name;
-          }
+
+          let asmName = items[i]?.product?.name || "";
           let asm_pos = "";
           let positionCode = "";
           let weight = 0;
@@ -188,7 +230,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
             asmName !== "" &&
             asmLength !== 0;
 
-          for (const property of properties || []) {
+          for (const property of properties) {
             const propertyName = String(property.name || "")
               .toUpperCase()
               .trim();
@@ -221,6 +263,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
                 asm_pos = String(value || "")
                   .replace("(?)", "")
                   .trim();
+
                 continue;
               }
 
@@ -274,7 +317,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
             center,
             asmPos: asm_pos,
             date: dayjs().format("DD-MM-YYYY"),
-            weight: weight,
+            weight,
             length: asmLength,
             name: asmName,
             positionCode,
@@ -336,6 +379,23 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
     const selections = await tcapi.viewer.getSelection();
 
     if (!selections?.length) return;
+
+    const createObjectKey = (modelId, objectId) =>
+      `${String(modelId)}::${String(objectId)}`;
+
+    const existingObjectKeys = new Set();
+
+    sequenceObjects.forEach((group) => {
+      (group?.objects || []).forEach((obj) => {
+        if (obj?.modelId == null || obj?.id == null) return;
+
+        existingObjectKeys.add(createObjectKey(obj.modelId, obj.id));
+      });
+    });
+
+    // Prevent duplicates within the current assignment.
+    const newObjectKeys = new Set();
+
     const newAddedSequenceObjects = [];
 
     for (const selection of selections) {
@@ -343,13 +403,27 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
         selection.modelId,
         selection.objectRuntimeIds,
       );
+
       for (let i = 0; i < items.length; i++) {
-        console.log(items[i]);
-        const properties = items[i]?.properties || [];
-        let asmName = "";
-        if (items[i].product) {
-          asmName = items[i].product.name;
+        const objectId = selection.objectRuntimeIds[i];
+
+        // Prevent duplicates based on modelId and objectId.
+        const objectKey = createObjectKey(selection.modelId, objectId);
+
+        if (existingObjectKeys.has(objectKey) || newObjectKeys.has(objectKey)) {
+          console.warn("Object has already been assigned.", {
+            modelId: selection.modelId,
+            objectId,
+          });
+
+          continue;
         }
+
+        newObjectKeys.add(objectKey);
+
+        const properties = items[i]?.properties || [];
+
+        let asmName = items[i]?.product?.name || "";
         let asm_pos = "";
         let positionCode = "";
         let weight = 0;
@@ -362,7 +436,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
           asmName !== "" &&
           asmLength !== 0;
 
-        for (const property of properties || []) {
+        for (const property of properties) {
           const propertyName = String(property.name || "")
             .toUpperCase()
             .trim();
@@ -395,6 +469,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
               asm_pos = String(value || "")
                 .replace("(?)", "")
                 .trim();
+
               continue;
             }
 
@@ -436,18 +511,17 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
             break;
           }
         }
-        const center = [0, 0, 0];
 
         newAddedSequenceObjects.push({
           modelId: selection.modelId,
           subPlanId: subPlan.id,
           planId: plan.id,
-          id: selection.objectRuntimeIds[i],
+          id: objectId,
           distance: 0,
-          center,
+          center: [0, 0, 0],
           asmPos: asm_pos,
           date: dayjs().format("DD-MM-YYYY"),
-          weight: weight,
+          weight,
           length: asmLength,
           name: asmName,
           positionCode,
@@ -518,6 +592,81 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
     );
   };
 
+  const handleHighlightObject = async (subPlan) => {
+    try {
+      const tcapi = await WorkspaceAPI.connect(window.parent);
+
+      const currentGroup = sequenceObjects.find(
+        (group) => group && String(group.subPlanId) === String(subPlan.id),
+      );
+
+      const objects = currentGroup?.objects || [];
+
+      if (!objects.length) {
+        await tcapi.viewer.setSelection(
+          {
+            modelObjectIds: [],
+          },
+          "set",
+        );
+
+        return;
+      }
+
+      // Group objects by modelId and prevent duplicate objectRuntimeIds.
+      const modelGroups = new Map();
+
+      for (const obj of objects) {
+        if (obj?.modelId == null || obj?.id == null) {
+          continue;
+        }
+
+        const modelId = String(obj.modelId);
+        const objectId = Number(obj.id);
+
+        if (!Number.isFinite(objectId)) {
+          continue;
+        }
+
+        if (!modelGroups.has(modelId)) {
+          modelGroups.set(modelId, {
+            modelId: obj.modelId,
+            objectRuntimeIds: new Set(),
+          });
+        }
+
+        modelGroups.get(modelId).objectRuntimeIds.add(objectId);
+      }
+
+      const modelObjectIds = [...modelGroups.values()]
+        .map((group) => ({
+          modelId: group.modelId,
+          objectRuntimeIds: [...group.objectRuntimeIds],
+        }))
+        .filter((group) => group.objectRuntimeIds.length > 0);
+
+      if (!modelObjectIds.length) {
+        await tcapi.viewer.setSelection(
+          {
+            modelObjectIds: [],
+          },
+          "set",
+        );
+
+        return;
+      }
+
+      await tcapi.viewer.setSelection(
+        {
+          modelObjectIds,
+        },
+        "set",
+      );
+    } catch (error) {
+      console.error("Failed to highlight objects:", error);
+    }
+  };
+
   const getObjectKey = (obj) => {
     const runtimeId = obj.id || obj.runtimeId || obj.objectRuntimeId;
 
@@ -572,6 +721,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
         onAssignObject={() => handleAssignObject(subPlan)}
         onAutoAssign={() => handleAutoAssign(subPlan)}
         onSortByDate={() => handleSortByDate(subPlan)}
+        onHighlightObject={()=>handleHighlightObject(subPlan)}
       />
     ),
     children: (

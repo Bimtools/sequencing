@@ -17,10 +17,9 @@ import {
 
 import { Collapse, Button, Modal, Form, Input, Spin } from "antd";
 
-import {
-  DeletePlanRequest,
-  UpdatePlanRequest,
-} from "../store/sequence/action";
+import * as WorkspaceAPI from "trimble-connect-workspace-api";
+
+import { DeletePlanRequest, UpdatePlanRequest } from "../store/sequence/action";
 
 import SubPlanModal from "./SubPlanModal";
 import SubPlanCollapse from "./SubPlanCollapse";
@@ -31,7 +30,13 @@ const Main = () => {
   const dispatch = useDispatch();
 
   const plans = useSelector((state) => state.sequence.plans || []);
+
+  const sequenceObjects = useSelector(
+    (state) => state.sequence.sequenceObjects || [],
+  );
+
   const loading = useSelector((state) => state.sequence.pending);
+
   const rootCommentId = useSelector((state) => state.sequence.rootCommentId);
 
   const activeSimulationItem = useSelector(
@@ -41,7 +46,9 @@ const Main = () => {
   const [form] = Form.useForm();
 
   const [isEditFormOpen, setIsEditFormOpen] = useState(false);
+
   const [isCreateSubPlanOpen, setIsCreateSubPlanOpen] = useState(false);
+
   const [isCopySubPlanOpen, setIsCopySubPlanOpen] = useState(false);
 
   const [planName, setPlanName] = useState("");
@@ -63,24 +70,36 @@ const Main = () => {
     const planKey = String(activeSimulationItem.planId);
 
     const exists = plans.some((plan) => String(plan.id) === planKey);
+
     if (!exists) return;
 
     setActivePlanKeys((prevKeys) => {
       const keys = prevKeys.map(String);
 
-      if (keys.includes(planKey)) return keys;
+      if (keys.includes(planKey)) {
+        return keys;
+      }
 
       return [...keys, planKey];
     });
   }, [plans, activeSimulationItem?.planId]);
 
   const handleDragEnd = ({ active, over }) => {
-    if (!over || active.id === over.id) return;
+    if (!over || active.id === over.id) {
+      return;
+    }
 
-    const oldIndex = plans.findIndex((x) => String(x.id) === String(active.id));
-    const newIndex = plans.findIndex((x) => String(x.id) === String(over.id));
+    const oldIndex = plans.findIndex(
+      (plan) => String(plan.id) === String(active.id),
+    );
 
-    if (oldIndex === -1 || newIndex === -1) return;
+    const newIndex = plans.findIndex(
+      (plan) => String(plan.id) === String(over.id),
+    );
+
+    if (oldIndex === -1 || newIndex === -1) {
+      return;
+    }
 
     const newPlans = arrayMove(plans, oldIndex, newIndex);
 
@@ -94,10 +113,10 @@ const Main = () => {
 
   const handleEdit = (plan) => {
     setSelectedPlan(plan);
-    setPlanName(plan.name);
+    setPlanName(plan.name || "");
 
     form.setFieldsValue({
-      planName: plan.name,
+      planName: plan.name || "",
     });
 
     setIsEditFormOpen(true);
@@ -124,14 +143,22 @@ const Main = () => {
   };
 
   const handleModifyName = () => {
-    if (!selectedPlan) return;
+    if (!selectedPlan) {
+      return;
+    }
 
-    const newPlans = plans.map((x) =>
-      String(x.id) !== String(selectedPlan.id)
-        ? x
+    const trimmedPlanName = planName.trim();
+
+    if (!trimmedPlanName) {
+      return;
+    }
+
+    const newPlans = plans.map((plan) =>
+      String(plan.id) !== String(selectedPlan.id)
+        ? plan
         : {
-            ...x,
-            name: planName,
+            ...plan,
+            name: trimmedPlanName,
           },
     );
 
@@ -158,8 +185,95 @@ const Main = () => {
     setActivePlanKeys(keys);
   };
 
+  const handleHighlightObject = async (plan) => {
+    try {
+      if (!plan?.id) {
+        return;
+      }
+
+      const tcapi = await WorkspaceAPI.connect(window.parent);
+
+      /*
+       * Get all objects from every Sub Plan
+       * that belongs to the selected Plan.
+       */
+      const objects = sequenceObjects
+        .filter((group) => group && String(group.planId) === String(plan.id))
+        .flatMap((group) =>
+          Array.isArray(group.objects) ? group.objects : [],
+        );
+
+      if (!objects.length) {
+        await tcapi.viewer.setSelection(
+          {
+            modelObjectIds: [],
+          },
+          "set",
+        );
+
+        return;
+      }
+
+      /*
+       * Group objects by modelId and prevent duplicate
+       * objectRuntimeIds within the same model.
+       */
+      const modelGroups = new Map();
+
+      for (const object of objects) {
+        if (object?.modelId == null || object?.id == null) {
+          continue;
+        }
+
+        const modelKey = String(object.modelId);
+        const objectRuntimeId = Number(object.id);
+
+        if (!Number.isFinite(objectRuntimeId)) {
+          continue;
+        }
+
+        if (!modelGroups.has(modelKey)) {
+          modelGroups.set(modelKey, {
+            modelId: object.modelId,
+            objectRuntimeIds: new Set(),
+          });
+        }
+
+        modelGroups.get(modelKey).objectRuntimeIds.add(objectRuntimeId);
+      }
+
+      const modelObjectIds = [...modelGroups.values()]
+        .map((group) => ({
+          modelId: group.modelId,
+          objectRuntimeIds: [...group.objectRuntimeIds],
+        }))
+        .filter((group) => group.objectRuntimeIds.length > 0);
+
+      if (!modelObjectIds.length) {
+        await tcapi.viewer.setSelection(
+          {
+            modelObjectIds: [],
+          },
+          "set",
+        );
+
+        return;
+      }
+
+      await tcapi.viewer.setSelection(
+        {
+          modelObjectIds,
+        },
+        "set",
+      );
+    } catch (error) {
+      console.error("Failed to highlight plan objects:", error);
+    }
+  };
+
   const collapseItems = plans.map((plan) => ({
     key: String(plan.id),
+
     label: (
       <SortableHeader
         plan={plan}
@@ -167,8 +281,10 @@ const Main = () => {
         onDelete={handleDelete}
         onAddSubPlan={handleAddSubPlan}
         onCopySubPlan={handleCopySubPlan}
+        onHighlightObject={handleHighlightObject}
       />
     ),
+
     children: (
       <SubPlanCollapse
         plan={plan}
@@ -202,13 +318,13 @@ const Main = () => {
       <Modal
         title="Edit Plan Name"
         open={isEditFormOpen}
+        footer={null}
         onCancel={() => {
           setIsEditFormOpen(false);
           setSelectedPlan(null);
           setPlanName("");
           form.resetFields();
         }}
-        footer={null}
       >
         <Form form={form} autoComplete="off" onFinish={handleModifyName}>
           <Form.Item
@@ -216,6 +332,7 @@ const Main = () => {
             rules={[
               {
                 required: true,
+                whitespace: true,
                 message: "Please enter plan name",
               },
             ]}
@@ -223,12 +340,16 @@ const Main = () => {
             <Input
               placeholder="Plan Name"
               value={planName}
-              onChange={(e) => setPlanName(e.target.value)}
+              onChange={(event) => setPlanName(event.target.value)}
             />
           </Form.Item>
 
           <Form.Item>
-            <Button type="primary" htmlType="submit" disabled={!planName}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              disabled={!planName.trim()}
+            >
               Modify
             </Button>
           </Form.Item>
@@ -242,7 +363,7 @@ const Main = () => {
           onDragEnd={handleDragEnd}
         >
           <SortableContext
-            items={plans.map((x) => String(x.id))}
+            items={plans.map((plan) => String(plan.id))}
             strategy={verticalListSortingStrategy}
           >
             <Collapse

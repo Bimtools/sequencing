@@ -368,29 +368,6 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem, displayIndexMap
   }, [sequenceObjects, subPlan.id]);
 
 
-  /*
-   * Đánh số theo ngày nhưng không thay đổi thứ tự
-   * của currentObjects.
-   *
-   * 15-07-2026: 1, 2, 3, 4
-   * 18-07-2026: 1, 2
-   */
-  const displayIndexMap1 = useMemo(() => {
-    const dateCounters = new Map();
-    const objectIndexes = new Map();
-    console.log(currentObjects)
-    currentObjects.forEach((item) => {
-      const dateKey = getObjectDate(item) || "NO_DATE";
-
-      const nextIndex = (dateCounters.get(dateKey) || 0) + 1;
-
-      dateCounters.set(dateKey, nextIndex);
-      objectIndexes.set(getObjectKey(item), nextIndex);
-    });
-
-    return objectIndexes;
-  }, [currentObjects]);
-
 
   const items = useMemo(() => {
     const result = [];

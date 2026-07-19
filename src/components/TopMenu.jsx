@@ -1,55 +1,96 @@
-import { Button, Form, Modal, Tooltip, Input, Flex, Upload } from "antd";
-import React from "react";
 import {
-  FolderAddOutlined,
+  Button,
+  DatePicker,
+  Flex,
+  Form,
+  Input,
+  message,
+  Modal,
+  Select,
+  Space,
+  Tooltip,
+} from "antd";
+
+import React, { useState } from "react";
+
+import {
+  CameraOutlined,
   DownloadOutlined,
   FileSearchOutlined,
-  UploadOutlined,
+  FolderAddOutlined,
 } from "@ant-design/icons";
+
 import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+
 import { useDispatch, useSelector } from "react-redux";
+
 import {
   CreatePlanRequest,
   SetActiveSimulationItem,
-  UploadTemplateRequest,
-  ExportTemplateRequest,
 } from "../store/sequence/action";
-import * as XLSX from "xlsx";
+
 import * as WorkspaceAPI from "trimble-connect-workspace-api";
+
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 
-const TopMenu = () => {
+dayjs.extend(customParseFormat);
+
+const DATE_FORMATS = ["DD-MM-YYYY", "DD/MM/YYYY", "YYYY-MM-DD", "YYYY/MM/DD"];
+
+const TopMenu = ({ projectName: projectNameProp = "" }) => {
   const dispatch = useDispatch();
+
   const [form] = Form.useForm();
+  const [exportForm] = Form.useForm();
 
   const plans = useSelector((state) => state.sequence.plans || []);
+
   const rootFolderId = useSelector((state) => state.sequence.rootFolderId);
+
   const rootCommentId = useSelector((state) => state.sequence.rootCommentId);
+
   const sequenceObjects = useSelector(
     (state) => state.sequence.sequenceObjects || [],
   );
-  const startDate = useSelector((state) => state.sequence.startDate);
 
-  const endDate = useSelector((state) => state.sequence.endDate);
+  const projectNameFromRedux = useSelector(
+    (state) => state.sequence.projectName || "",
+  );
 
-  const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const projectName = projectNameProp || projectNameFromRedux || "";
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
   const planName = Form.useWatch("planName", form);
 
+  // =====================================================
+  // CREATE PLAN
+  // =====================================================
+
   const handleCreate = async () => {
-    const values = await form.validateFields();
+    try {
+      const values = await form.validateFields();
 
-    dispatch(
-      CreatePlanRequest({
-        name: values.planName,
-        rootCommentId,
-        rootFolderId,
-        plans,
-      }),
-    );
+      dispatch(
+        CreatePlanRequest({
+          name: values.planName.trim(),
+          rootCommentId,
+          rootFolderId,
+          plans,
+        }),
+      );
 
-    form.resetFields();
-    setIsModalOpen(false);
+      form.resetFields();
+      setIsModalOpen(false);
+    } catch (error) {
+      if (!error?.errorFields) {
+        console.error("Create plan error:", error);
+      }
+    }
   };
 
   const handleCancel = () => {
@@ -57,115 +98,121 @@ const TopMenu = () => {
     setIsModalOpen(false);
   };
 
-  const exportToExcel = (data, fileName = "Sequencing.xlsx") => {
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
-    XLSX.writeFile(workbook, fileName);
-  };
+  // =====================================================
+  // HIGHLIGHT SELECTED OBJECT
+  // =====================================================
 
   const handleHighlight = async () => {
-    const tcapi = await WorkspaceAPI.connect(window.parent);
+    try {
+      const tcapi = await WorkspaceAPI.connect(window.parent);
 
-    const selections = await tcapi.viewer.getSelection();
-    if (!selections?.length) return;
+      const selections = await tcapi.viewer.getSelection();
 
-    const modelId = selections[0].modelId;
-    const runtimeId = selections[0].objectRuntimeIds?.[0];
-
-    if (!modelId || !runtimeId) return;
-
-    let found = null;
-
-    for (const group of sequenceObjects) {
-      const objects = group.objects || [];
-
-      const obj = objects.find((x) => {
-        const objRuntimeId = x.id || x.runtimeId || x.objectRuntimeId;
-        const objModelId = x.modelId || group.modelId;
-
-        return (
-          String(objModelId) === String(modelId) &&
-          String(objRuntimeId) === String(runtimeId)
-        );
-      });
-
-      if (obj) {
-        found = {
-          planId: group.planId || group.id || obj.planId,
-          subPlanId: group.subPlanId || obj.subPlanId,
-          modelId,
-          runtimeId,
-        };
-
-        break;
+      if (!selections?.length) {
+        message.warning("Please select an object in Trimble Connect.");
+        return;
       }
+
+      const modelId = selections[0]?.modelId;
+      const runtimeId = selections[0]?.objectRuntimeIds?.[0];
+
+      if (!modelId || runtimeId == null) {
+        message.warning("The selected object is invalid.");
+        return;
+      }
+
+      let found = null;
+
+      for (const group of sequenceObjects) {
+        const objects = group?.objects || [];
+
+        const obj = objects.find((item) => {
+          const objRuntimeId =
+            item.id || item.runtimeId || item.objectRuntimeId;
+
+          const objModelId = item.modelId || group.modelId;
+
+          return (
+            String(objModelId) === String(modelId) &&
+            String(objRuntimeId) === String(runtimeId)
+          );
+        });
+
+        if (obj) {
+          found = {
+            planId: group.planId || group.id || obj.planId,
+
+            subPlanId: group.subPlanId || obj.subPlanId,
+
+            modelId,
+            runtimeId,
+          };
+
+          break;
+        }
+      }
+
+      if (!found) {
+        message.warning("The selected object was not found in sequencing.");
+        return;
+      }
+
+      dispatch(
+        SetActiveSimulationItem({
+          planId: String(found.planId),
+          subPlanId: String(found.subPlanId),
+          modelId: found.modelId,
+          id: String(found.runtimeId),
+          runtimeId: found.runtimeId,
+        }),
+      );
+    } catch (error) {
+      console.error("Highlight object error:", error);
+
+      message.error("Unable to highlight the selected object.");
     }
-
-    if (!found) return;
-
-    dispatch(
-      SetActiveSimulationItem({
-        planId: String(found.planId),
-        subPlanId: String(found.subPlanId),
-        modelId: found.modelId,
-        id: String(found.runtimeId),
-        runtimeId: found.runtimeId,
-      }),
-    );
   };
 
-  // const handleExportExcel = async () => {
-  //   // const data = [];
-  //   // let index = 0;
-
-  //   // for (const group of sequenceObjects) {
-  //   //   if (!group) continue;
-
-  //   //   const plan = plans.find((x) => String(x.id) === String(group.planId));
-
-  //   //   for (const obj of group.objects || []) {
-  //   //     index += 1;
-
-  //   //     data.push({
-  //   //       group: plan?.name ?? "",
-  //   //       asmPos: obj.asmPos,
-  //   //       weight: obj.weight,
-  //   //       location: obj.positionCode,
-  //   //       date: obj.date || obj.assignedDate,
-  //   //       sequenceNo: index,
-  //   //     });
-  //   //   }
-  //   // }
-
-  //   // exportToExcel(data, "Sequencing.xlsx");
-
-  // };
+  // =====================================================
+  // EXCEL HELPERS
+  // =====================================================
 
   const getCellText = (cell) => {
     if (!cell?.value) return "";
 
-    if (typeof cell.value === "string") return cell.value;
-
-    if (cell.value.richText) {
-      return cell.value.richText.map((x) => x.text).join("");
+    if (typeof cell.value === "string") {
+      return cell.value;
     }
 
-    if (cell.value.text) return cell.value.text;
-    if (cell.value.result) return String(cell.value.result);
+    if (cell.value.richText) {
+      return cell.value.richText.map((item) => item.text).join("");
+    }
+
+    if (cell.value.text) {
+      return cell.value.text;
+    }
+
+    if (cell.value.result != null) {
+      return String(cell.value.result);
+    }
 
     return "";
   };
 
   const clone = (value) => {
     if (value == null) return value;
-    if (typeof value !== "object") return value;
+
+    if (typeof value !== "object") {
+      return value;
+    }
+
     return JSON.parse(JSON.stringify(value));
   };
 
   const fillText = (value, data, keepMissing = true) => {
-    if (typeof value !== "string") return value;
+    if (typeof value !== "string") {
+      return value;
+    }
 
     return value.replace(/\{\{\s*(.*?)\s*\}\}/g, (match, key) => {
       const field = key.trim();
@@ -205,6 +252,7 @@ const TopMenu = () => {
   };
 
   const findTemplateRows = (worksheet) => {
+    let planRowIndex = null;
     let groupRowIndex = null;
     let itemRowIndex = null;
 
@@ -213,6 +261,10 @@ const TopMenu = () => {
         const text = getCellText(cell);
 
         if (!text) return;
+
+        if (text.includes("{{PlanName}}")) {
+          planRowIndex = rowNumber;
+        }
 
         if (text.includes("{{GroupDate}}") || text.includes("{{Qty}}")) {
           groupRowIndex = rowNumber;
@@ -228,15 +280,28 @@ const TopMenu = () => {
       });
     });
 
-    if (!groupRowIndex || !itemRowIndex) {
-      throw new Error("Template thiếu {{GroupDate}}, {{Qty}} hoặc {{Index}}");
+    if (!planRowIndex) {
+      throw new Error("Missing {{PlanName}} in Excel template.");
     }
 
-    if (itemRowIndex <= groupRowIndex) {
-      throw new Error("Dòng {{Index}} phải nằm dưới dòng {{GroupDate}}");
+    if (!groupRowIndex) {
+      throw new Error("Missing {{GroupDate}} or {{Qty}} in Excel template.");
+    }
+
+    if (!itemRowIndex) {
+      throw new Error(
+        "Missing {{Index}}, {{AsmName}} or {{AsmPos}} in Excel template.",
+      );
+    }
+
+    if (!(planRowIndex < groupRowIndex && groupRowIndex < itemRowIndex)) {
+      throw new Error(
+        "Template row order must be {{PlanName}} → {{GroupDate}} → {{Index}}.",
+      );
     }
 
     return {
+      planRowIndex,
       groupRowIndex,
       itemRowIndex,
     };
@@ -246,22 +311,31 @@ const TopMenu = () => {
     worksheet.spliceRows(targetRowNumber, 0, []);
 
     const sourceRow = worksheet.getRow(sourceRowNumber);
+
     const targetRow = worksheet.getRow(targetRowNumber);
 
     targetRow.height = sourceRow.height;
     targetRow.hidden = sourceRow.hidden;
     targetRow.outlineLevel = sourceRow.outlineLevel;
 
-    sourceRow.eachCell({ includeEmpty: true }, (sourceCell, col) => {
-      const targetCell = targetRow.getCell(col);
+    sourceRow.eachCell({ includeEmpty: true }, (sourceCell, columnNumber) => {
+      const targetCell = targetRow.getCell(columnNumber);
 
       targetCell.value = clone(sourceCell.value);
+
       targetCell.style = clone(sourceCell.style);
+
       targetCell.numFmt = sourceCell.numFmt;
+
       targetCell.alignment = clone(sourceCell.alignment);
+
       targetCell.border = clone(sourceCell.border);
+
       targetCell.fill = clone(sourceCell.fill);
+
       targetCell.font = clone(sourceCell.font);
+
+      targetCell.protection = clone(sourceCell.protection);
     });
 
     targetRow.commit();
@@ -269,148 +343,396 @@ const TopMenu = () => {
     return targetRow;
   };
 
-  const fillGroups = (worksheet, groups) => {
-    const { groupRowIndex, itemRowIndex } = findTemplateRows(worksheet);
+  // =====================================================
+  // FILL EXCEL: PLAN -> DATE -> ITEM
+  // =====================================================
+
+  const fillGroups = (worksheet, planGroups) => {
+    const { planRowIndex, groupRowIndex, itemRowIndex } =
+      findTemplateRows(worksheet);
+
+    const planTemplateRow = planRowIndex;
+    const groupTemplateRow = groupRowIndex;
+    const itemTemplateRow = itemRowIndex;
 
     let insertAt = itemRowIndex + 1;
-    groups.forEach((group) => {
-      const groupRow = copyRowTo(worksheet, groupRowIndex, insertAt);
 
-      fillRow(groupRow, {
-        GroupDate: group.date || "",
-        Qty: group.items.length,
+    planGroups.forEach((plan, planIndex) => {
+      if (!plan?.groups?.length) {
+        return;
+      }
+
+      // =========================
+      // PLAN
+      // =========================
+
+      const planRow = copyRowTo(worksheet, planTemplateRow, insertAt);
+
+      fillRow(planRow, {
+        PlanName: plan.planName || "",
       });
 
-      insertAt++;
+      insertAt += 1;
 
-      group.items.forEach((item, index) => {
-        const itemRow = copyRowTo(worksheet, itemRowIndex, insertAt);
+      // =========================
+      // DATE GROUPS
+      // =========================
 
-        fillRow(itemRow, {
-          Index: index + 1,
-          AsmName: item.AsmName || "",
-          AsmPos: item.AsmPos || "",
-          MainProfile: item.MainProfile || "",
-          GridPos: item.GridPos || "",
-          Length: item.Length || "",
-          Weight: item.Weight || "",
-          Comment: item.Comment || "",
+      plan.groups.forEach((group) => {
+        const items = group.items || [];
+
+        const groupRow = copyRowTo(worksheet, groupTemplateRow, insertAt);
+
+        fillRow(groupRow, {
+          GroupDate: group.date || "",
+          Qty: items.length,
         });
 
-        insertAt++;
+        insertAt += 1;
+
+        // =========================
+        // ITEMS
+        // =========================
+
+        items.forEach((item, itemIndex) => {
+          const itemRow = copyRowTo(worksheet, itemTemplateRow, insertAt);
+
+          fillRow(itemRow, {
+            Index: itemIndex + 1,
+            AsmName: item.AsmName || "",
+            AsmPos: item.AsmPos || "",
+            MainProfile: item.MainProfile || "",
+            GridPos: item.GridPos || "",
+            Length: item.Length ?? "",
+            Weight: item.Weight ?? "",
+            Comment: item.Comment || "",
+          });
+
+          insertAt += 1;
+        });
       });
-      insertAt++;
+
+      // Empty row between plans
+      if (planIndex < planGroups.length - 1) {
+        worksheet.spliceRows(insertAt, 0, []);
+
+        insertAt += 1;
+      }
     });
 
-    worksheet.spliceRows(groupRowIndex, itemRowIndex - groupRowIndex + 1);
+    // Remove original template rows
+    worksheet.spliceRows(planRowIndex, itemRowIndex - planRowIndex + 1);
   };
 
-  const buildGroups = () => {
-    const dateGroups = {};
+  // =====================================================
+  // DATE PARSER
+  // =====================================================
 
-    const start = startDate ? dayjs(startDate, "DD-MM-YYYY") : null;
-    const end = endDate ? dayjs(endDate, "DD-MM-YYYY") : null;
+  const parseObjectDate = (value) => {
+    if (!value) return null;
+
+    if (dayjs.isDayjs(value)) {
+      return value.isValid() ? value : null;
+    }
+
+    const strictDate = dayjs(value, DATE_FORMATS, true);
+
+    if (strictDate.isValid()) {
+      return strictDate;
+    }
+
+    const normalDate = dayjs(value);
+
+    return normalDate.isValid() ? normalDate : null;
+  };
+
+  // =====================================================
+  // BUILD GROUPS
+  // =====================================================
+
+  const buildGroups = ({
+    selectedPlanIds = [],
+    startDateValue = null,
+    endDateValue = null,
+  }) => {
+    const planGroups = new Map();
+
+    const selectedPlanIdSet = new Set(selectedPlanIds.map((id) => String(id)));
+
+    const start = startDateValue ? dayjs(startDateValue).startOf("day") : null;
+
+    const end = endDateValue ? dayjs(endDateValue).endOf("day") : null;
 
     sequenceObjects.forEach((group) => {
-      (group.objects || []).forEach((obj) => {
-        const date = obj.date || obj.assignedDate;
-        const objDate = dayjs(date, "DD-MM-YYYY");
+      if (!group) return;
 
-        let include = true;
+      const groupPlanId = String(group.planId || "");
+
+      // Only export selected plans
+      if (!selectedPlanIdSet.has(groupPlanId)) {
+        return;
+      }
+
+      const plan = plans.find((item) => String(item.id) === groupPlanId);
+
+      const planId = String(group.planId || plan?.id || "no-plan");
+
+      const planNameValue = plan?.name || group.planName || "No Plan";
+
+      (group.objects || []).forEach((obj) => {
+        const rawDate = obj.date || obj.assignedDate;
+
+        const objDate = parseObjectDate(rawDate);
+
+        if (!objDate) return;
 
         if (start && objDate.isBefore(start, "day")) {
-          include = false;
+          return;
         }
 
         if (end && objDate.isAfter(end, "day")) {
-          include = false;
+          return;
         }
 
-        if (!include) return;
+        if (!planGroups.has(planId)) {
+          planGroups.set(planId, {
+            planId,
+            planName: planNameValue,
 
-        if (!dateGroups[date]) {
-          dateGroups[date] = [];
+            planOrder: plans.findIndex((item) => String(item.id) === planId),
+
+            dates: new Map(),
+          });
         }
 
-        dateGroups[date].push({
+        const currentPlan = planGroups.get(planId);
+
+        const dateKey = objDate.format("DD-MM-YYYY");
+
+        if (!currentPlan.dates.has(dateKey)) {
+          currentPlan.dates.set(dateKey, []);
+        }
+
+        const weight = Number(obj.weight);
+
+        currentPlan.dates.get(dateKey).push({
           AsmName: obj.name || obj.asmName || "",
+
           AsmPos: obj.asmPos || "",
+
           MainProfile: obj.profile || obj.mainProfile || "",
+
           GridPos: obj.positionCode || obj.gridPos || obj.location || "",
-          Length: obj.length || "",
-          Weight: Math.round(Number(obj.weight || 0) * 100) / 100,
+
+          Length: obj.length ?? "",
+
+          Weight: Number.isFinite(weight)
+            ? Math.round((weight + Number.EPSILON) * 100) / 100
+            : "",
+
           Comment: obj.comment || "",
         });
       });
     });
 
-    return Object.entries(dateGroups)
-      .sort(
-        ([dateA], [dateB]) =>
-          dayjs(dateA, "DD-MM-YYYY").valueOf() -
-          dayjs(dateB, "DD-MM-YYYY").valueOf(),
-      )
-      .map(([date, items]) => ({
-        date,
-        items,
-      }));
+    return Array.from(planGroups.values())
+      .map((plan) => ({
+        planId: plan.planId,
+        planName: plan.planName,
+        planOrder: plan.planOrder,
+
+        groups: Array.from(plan.dates.entries())
+          .sort(
+            ([dateA], [dateB]) =>
+              dayjs(dateA, "DD-MM-YYYY", true).valueOf() -
+              dayjs(dateB, "DD-MM-YYYY", true).valueOf(),
+          )
+          .map(([date, items]) => ({
+            date,
+            items,
+          })),
+      }))
+      .filter((plan) => plan.groups.length > 0)
+      .sort((a, b) => {
+        const orderA = a.planOrder >= 0 ? a.planOrder : Number.MAX_SAFE_INTEGER;
+
+        const orderB = b.planOrder >= 0 ? b.planOrder : Number.MAX_SAFE_INTEGER;
+
+        return orderA - orderB;
+      });
   };
 
-  const handleExportExcel = async () => {
+  // =====================================================
+  // OPEN EXPORT MODAL
+  // =====================================================
+
+  const handleOpenExportModal = () => {
+    exportForm.resetFields();
+
+    exportForm.setFieldsValue({
+      startDate: null,
+      endDate: null,
+      planIds: plans.map((x) => String(x.id)),
+    });
+
+    setExportModalOpen(true);
+  };
+
+  const handleCloseExportModal = () => {
+    if (exporting) return;
+
+    exportForm.resetFields();
+    setExportModalOpen(false);
+  };
+
+  // =====================================================
+  // EXPORT EXCEL
+  // =====================================================
+
+  const handleExportExcel = async ({
+    selectedPlanIds,
+    startDateValue,
+    endDateValue,
+  }) => {
     try {
-      const tcapi = await WorkspaceAPI.connect(window.parent);
-      const project = await tcapi.project.getProject();
+      setExporting(true);
+
+      const groups = buildGroups({
+        selectedPlanIds,
+        startDateValue,
+        endDateValue,
+      });
+
+      if (!groups.length) {
+        message.warning("No data matches the selected conditions.");
+
+        return;
+      }
 
       const response = await fetch(
         `${process.env.PUBLIC_URL}/Erection_Template.xlsx`,
       );
 
       if (!response.ok) {
-        throw new Error("Erection_Template.xlsx is not available in public");
+        throw new Error(
+          `Unable to download Excel template: ${response.status}`,
+        );
       }
 
-      const buffer = await response.arrayBuffer();
+      const arrayBuffer = await response.arrayBuffer();
 
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(buffer);
+
+      await workbook.xlsx.load(arrayBuffer);
 
       const worksheet = workbook.worksheets[0];
 
       if (!worksheet) {
-        throw new Error("Template has no worksheet");
+        throw new Error("No worksheet was found in the Excel template.");
       }
 
       fillHeader(worksheet, {
-        ProjectName: project.name,
-        ReportDate: new Date().toLocaleDateString("vi-VN"),
+        ProjectName: projectName || "",
+
+        ReportDate: dayjs().format("DD-MM-YYYY"),
+
+        StartDate: startDateValue
+          ? dayjs(startDateValue).format("DD-MM-YYYY")
+          : "",
+
+        EndDate: endDateValue ? dayjs(endDateValue).format("DD-MM-YYYY") : "",
       });
 
-      fillGroups(worksheet, buildGroups());
+      fillGroups(worksheet, groups);
 
-      const output = await workbook.xlsx.writeBuffer();
+      const buffer = await workbook.xlsx.writeBuffer();
+
+      const startText = startDateValue
+        ? dayjs(startDateValue).format("DD-MM-YYYY")
+        : "All";
+
+      const endText = endDateValue
+        ? dayjs(endDateValue).format("DD-MM-YYYY")
+        : "All";
+
+      const safeProjectName = (projectName || "Report").replace(
+        /[\\/:*?"<>|]/g,
+        "_",
+      );
+
+      const fileName =
+        `Erection_${safeProjectName}` + `_${startText}_${endText}.xlsx`;
 
       saveAs(
-        new Blob([output], {
+        new Blob([buffer], {
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }),
-        "Sequencing.xlsx",
+        fileName,
       );
+
+      message.success("Excel exported successfully.");
+
+      exportForm.resetFields();
+      setExportModalOpen(false);
     } catch (error) {
-      console.error(error);
+      console.error("Export Excel error:", error);
+
+      message.error(error?.message || "Unable to export Excel.");
+    } finally {
+      setExporting(false);
     }
   };
 
+  const handleConfirmExport = async () => {
+    try {
+      const values = await exportForm.validateFields();
+
+      const startDateValue = values.startDate || null;
+      const endDateValue = values.endDate || null;
+
+      await handleExportExcel({
+        selectedPlanIds: values.planIds || [],
+
+        startDateValue,
+        endDateValue,
+      });
+    } catch (error) {
+      if (error?.errorFields) {
+        return;
+      }
+
+      console.error("Validate export form error:", error);
+    }
+  };
+
+  // =====================================================
+  // SAVE CAMERA
+  // =====================================================
+  const handleSaveCamera = async () => {
+    const tcapi = await WorkspaceAPI.connect(window.parent);
+
+    const camera = await tcapi.viewer.getCamera();
+
+    console.log(camera);
+  };
+
+  // =====================================================
+  // JSX
+  // =====================================================
+
   return (
     <>
+      {/* CREATE PLAN MODAL */}
       <Modal
         title="Create New Plan"
         open={isModalOpen}
         onCancel={handleCancel}
         footer={null}
+        destroyOnHidden
         styles={{
           header: {
             padding: 0,
-            marginBottom: 0,
+            marginBottom: 12,
           },
           body: {
             padding: 0,
@@ -420,15 +742,16 @@ const TopMenu = () => {
         <Form form={form} autoComplete="off" layout="vertical">
           <Form.Item
             name="planName"
-            style={{ marginBottom: 2 }}
+            style={{ marginBottom: 12 }}
             rules={[
               {
                 required: true,
-                message: "Please enter plan name",
+                whitespace: true,
+                message: "Please enter plan name.",
               },
             ]}
           >
-            <Input placeholder="Plan Name" />
+            <Input placeholder="Plan Name" onPressEnter={handleCreate} />
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0 }}>
@@ -443,41 +766,190 @@ const TopMenu = () => {
         </Form>
       </Modal>
 
-      <Flex
-        justify="space-between"
-        align="center"
-        style={{ padding: "0 16px" }}
+      {/* EXPORT EXCEL MODAL */}
+      <Modal
+        title="Export Excel"
+        open={exportModalOpen}
+        onCancel={handleCloseExportModal}
+        onOk={handleConfirmExport}
+        okText="Export"
+        cancelText="Cancel"
+        confirmLoading={exporting}
+        destroyOnHidden
+        maskClosable={!exporting}
+        closable={!exporting}
       >
-        <h1 style={{ margin: 0, fontSize: 18 }}>Sequencing</h1>
+        <Form
+          form={exportForm}
+          layout="vertical"
+          initialValues={{
+            startDate: null,
+            endDate: null,
+            planIds: [],
+          }}
+        >
+          <Space style={{ width: "100%" }} size={16} align="start">
+            <Form.Item label="Start Date" name="startDate" style={{ flex: 1 }}>
+              <DatePicker
+                style={{ width: "100%" }}
+                format="DD-MM-YYYY"
+                allowClear
+              />
+            </Form.Item>
 
-        <div>
-          <Tooltip title="Create new plan">
-            <Button
-              size="large"
-              type="text"
-              icon={<FolderAddOutlined style={{ fontSize: 22 }} />}
-              onClick={() => setIsModalOpen(true)}
-            />
-          </Tooltip>
+            <Form.Item
+              label="End Date"
+              name="endDate"
+              style={{ flex: 1 }}
+              dependencies={["startDate"]}
+              rules={[
+                ({ getFieldValue }) => ({
+                  validator(_, value) {
+                    const start = getFieldValue("startDate");
 
-          <Tooltip title="Export to Excel">
-            <Button
-              size="large"
-              type="text"
-              icon={<DownloadOutlined style={{ fontSize: 22 }} />}
-              onClick={handleExportExcel}
-            />
-          </Tooltip>
+                    if (!start || !value) {
+                      return Promise.resolve();
+                    }
 
-          <Tooltip title="Highlight row from selected object">
-            <Button
-              size="large"
-              type="text"
-              icon={<FileSearchOutlined style={{ fontSize: 22 }} />}
-              onClick={handleHighlight}
+                    if (value.isBefore(start, "day")) {
+                      return Promise.reject(
+                        new Error(
+                          "End Date must be greater than or equal to Start Date.",
+                        ),
+                      );
+                    }
+
+                    return Promise.resolve();
+                  },
+                }),
+              ]}
+            >
+              <DatePicker
+                style={{ width: "100%" }}
+                format="DD-MM-YYYY"
+                allowClear
+              />
+            </Form.Item>
+          </Space>
+
+          <Form.Item
+            label="Plans"
+            name="planIds"
+            rules={[
+              {
+                required: true,
+                type: "array",
+                min: 1,
+                message: "Please select at least one plan.",
+              },
+            ]}
+          >
+            <Select
+              mode="multiple"
+              allowClear
+              showSearch
+              maxTagCount="responsive"
+              placeholder="Select plans"
+              optionFilterProp="label"
+              options={plans.map((plan) => ({
+                value: String(plan.id),
+
+                label: plan.name || "Unnamed Plan",
+              }))}
             />
-          </Tooltip>
-        </div>
+          </Form.Item>
+
+          <Space
+            style={{
+              marginTop: -12,
+              marginBottom: 8,
+            }}
+          >
+            <Button
+              type="link"
+              size="small"
+              onClick={() => {
+                exportForm.setFieldValue(
+                  "planIds",
+
+                  plans.map((plan) => String(plan.id)),
+                );
+
+                exportForm.validateFields(["planIds"]);
+              }}
+            >
+              Select all
+            </Button>
+
+            <Button
+              type="link"
+              size="small"
+              onClick={() => {
+                exportForm.setFieldValue("planIds", []);
+              }}
+            >
+              Clear all
+            </Button>
+          </Space>
+        </Form>
+      </Modal>
+
+      {/* TOP MENU */}
+      <Flex
+        vertical
+        gap={8}
+        style={{
+          padding: "0 16px",
+        }}
+      >
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 24,
+          }}
+        >
+          Sequencing
+        </h1>
+
+        <Flex justify="flex-end">
+          <Space size={4}>
+            <Tooltip title="Create new plan">
+              <Button
+                size="large"
+                type="text"
+                icon={<FolderAddOutlined style={{ fontSize: 22 }} />}
+                onClick={() => setIsModalOpen(true)}
+              />
+            </Tooltip>
+
+            <Tooltip title="Export to Excel">
+              <Button
+                size="large"
+                type="text"
+                icon={<DownloadOutlined style={{ fontSize: 22 }} />}
+                onClick={handleOpenExportModal}
+              />
+            </Tooltip>
+
+            {/* <Tooltip title="Save View">
+              <Button
+                size="large"
+                type="text"
+                icon={<CameraOutlined style={{ fontSize: 22 }} />}
+                onClick={handleSaveCamera}
+              />
+            </Tooltip> */}
+
+            <Tooltip title="Highlight row from selected object">
+              <Button
+                size="large"
+                type="text"
+                icon={<FileSearchOutlined style={{ fontSize: 22 }} />}
+                onClick={handleHighlight}
+              />
+            </Tooltip>
+          </Space>
+        </Flex>
       </Flex>
     </>
   );
