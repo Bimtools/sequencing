@@ -372,9 +372,45 @@ export default function Simulation() {
 
     const tcapi = await getTcapi();
 
-    await tcapi.viewer.isolateEntities(objects);
-  };
+    const isolateObjects = objects.map((group) => ({
+      modelId: group.modelId,
+      entityIds: [...(group.entityIds || [])],
+    }));
 
+    const modelMap = new Map(
+      isolateObjects.map((group) => [String(group.modelId), group]),
+    );
+
+    const grids = await tcapi.viewer.getObjects({
+      parameter: {
+        class: "IFCGRID",
+      },
+    });
+
+    grids.forEach((group) => {
+      const key = String(group.modelId);
+
+      const gridIds = (group.objects || [])
+        .map((item) => item.id)
+        .filter((id) => id != null);
+
+      if (modelMap.has(key)) {
+        const target = modelMap.get(key);
+
+        target.entityIds = [...new Set([...target.entityIds, ...gridIds])];
+      } else {
+        const target = {
+          modelId: group.modelId,
+          entityIds: [...new Set(gridIds)],
+        };
+
+        isolateObjects.push(target);
+        modelMap.set(key, target);
+      }
+    });
+
+    await tcapi.viewer.isolateEntities(isolateObjects);
+  };
   // =====================================================
   // NAVIGATION
   // =====================================================
