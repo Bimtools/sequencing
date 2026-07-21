@@ -590,6 +590,7 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
   // =====================================================
 
   const handleExportExcel = async ({
+    fileNameInput,
     selectedPlanIds,
     startDateValue,
     endDateValue,
@@ -660,8 +661,7 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
         "_",
       );
 
-      const fileName =
-        `Erection_${safeProjectName}` + `_${startText}_${endText}.xlsx`;
+      const fileName = `${fileNameInput}.xlsx`;
 
       saveAs(
         new Blob([buffer], {
@@ -687,14 +687,11 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
     try {
       const values = await exportForm.validateFields();
 
-      const startDateValue = values.startDate || null;
-      const endDateValue = values.endDate || null;
-
       await handleExportExcel({
+        fileNameInput: values.fileName?.trim() || "Sequencing Report",
         selectedPlanIds: values.planIds || [],
-
-        startDateValue,
-        endDateValue,
+        startDateValue: values.startDate || null,
+        endDateValue: values.endDate || null,
       });
     } catch (error) {
       if (error?.errorFields) {
@@ -783,11 +780,25 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
           form={exportForm}
           layout="vertical"
           initialValues={{
+            fileName: "Sequencing Report",
             startDate: null,
             endDate: null,
             planIds: [],
           }}
         >
+          <Form.Item
+            label="File Name"
+            name="fileName"
+            rules={[
+              {
+                required: true,
+                whitespace: true,
+                message: "Please enter file name.",
+              },
+            ]}
+          >
+            <Input placeholder="Enter file name" maxLength={100} />
+          </Form.Item>
           <Space style={{ width: "100%" }} size={16} align="start">
             <Form.Item label="Start Date" name="startDate" style={{ flex: 1 }}>
               <DatePicker

@@ -5,6 +5,7 @@ import App from "./App";
 import reportWebVitals from "./reportWebVitals";
 import { Provider } from "react-redux";
 import store from "./store";
+import { App as AntdApp } from "antd";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
@@ -12,7 +13,9 @@ root.render(
 
   // </React.StrictMode>
   <Provider store={store}>
-    <App />
+    <AntdApp>
+      <App />
+    </AntdApp>
   </Provider>,
 );
 

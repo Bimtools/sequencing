@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Collapse, Empty, Spin } from "antd";
+import { Collapse, Empty, Spin, App } from "antd";
 import dayjs from "dayjs";
 import * as WorkspaceAPI from "trimble-connect-workspace-api";
 
@@ -38,6 +38,7 @@ const getRgbColor = (color) => {
 
 const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
   const dispatch = useDispatch();
+  const { message } = App.useApp();
 
   const subPlans = useSelector((state) => state.sequence.subPlans);
   const sequenceObjects = useSelector(
@@ -162,7 +163,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
       const newObjectKeys = new Set();
 
       tcapi.viewer.activateTool("selection");
-
+      let duplicateCount = 0;
       for (const selection of selections) {
         const objBoxes = await tcapi.viewer.getObjectBoundingBoxes(
           selection.modelId,
@@ -189,7 +190,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
               modelId: selection.modelId,
               id: box.id,
             });
-
+            duplicateCount++;
             continue;
           }
 
@@ -325,6 +326,12 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
         }
       }
 
+      if (duplicateCount > 0) {
+        message.warning(
+          `${duplicateCount} object(s) have already been existing in the plan.`,
+        );
+      }
+
       newAddedSequenceObjects.sort(
         (a, b) => Number(a.distance) - Number(b.distance),
       );
@@ -397,7 +404,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
     const newObjectKeys = new Set();
 
     const newAddedSequenceObjects = [];
-
+    let duplicateCount = 0;
     for (const selection of selections) {
       const items = await tcapi.viewer.getObjectProperties(
         selection.modelId,
@@ -415,7 +422,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
             modelId: selection.modelId,
             objectId,
           });
-
+          duplicateCount++;
           continue;
         }
 
@@ -528,7 +535,12 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
         });
       }
     }
-
+    console.log(duplicateCount);
+    if (duplicateCount > 0) {
+      message.warning(
+        `${duplicateCount} object(s) have already been existing in the plan.`,
+      );
+    }
     const existingObjects =
       sequenceObjects.find(
         (x) => x && String(x.subPlanId) === String(subPlan.id),
@@ -721,7 +733,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
         onAssignObject={() => handleAssignObject(subPlan)}
         onAutoAssign={() => handleAutoAssign(subPlan)}
         onSortByDate={() => handleSortByDate(subPlan)}
-        onHighlightObject={()=>handleHighlightObject(subPlan)}
+        onHighlightObject={() => handleHighlightObject(subPlan)}
       />
     ),
     children: (
