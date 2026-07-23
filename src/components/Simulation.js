@@ -20,6 +20,7 @@ import {
   SetActiveSimulationItem,
   SetSimulationDateRange,
 } from "../store/sequence/action";
+import { Await } from "react-router-dom";
 
 dayjs.extend(customParseFormat);
 
@@ -365,6 +366,47 @@ export default function Simulation() {
     );
   };
 
+  const gotoCamera = async (item, objects) => {
+    try {
+      const tcapi = await getTcapi();
+
+      if (item?.camera) {
+        await tcapi.viewer.setCamera(item.camera, {
+          animationTime: 1000,
+        });
+        return;
+      }
+
+      if (!objects?.length) {
+        return;
+      }
+
+      const selector = {
+        modelObjectIds: objects
+          .filter(
+            (group) =>
+              group.modelId != null &&
+              Array.isArray(group.entityIds) &&
+              group.entityIds.length > 0,
+          )
+          .map((group) => ({
+            modelId: group.modelId,
+            objectRuntimeIds: group.entityIds,
+          })),
+      };
+
+      if (!selector.modelObjectIds.length) {
+        return;
+      }
+
+      await tcapi.viewer.setCamera(selector, {
+        animationTime: 1000,
+      });
+    } catch (error) {
+      console.error("gotoCamera error:", error);
+    }
+  };
+
   const isolateObjectsInTrimble = async (objects) => {
     if (!objects?.length) {
       return;
@@ -445,6 +487,8 @@ export default function Simulation() {
         const accumulatedObjects = buildAccumulatedObjects(safeIndex);
 
         await isolateObjectsInTrimble(accumulatedObjects);
+
+        await gotoCamera(item, accumulatedObjects);
 
         await colorObjectInTrimble(item);
 

@@ -6,7 +6,16 @@ import React, {
   useEffect,
 } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Empty, List, Dropdown, Button, DatePicker, Input } from "antd";
+import {
+  Empty,
+  List,
+  Dropdown,
+  Button,
+  DatePicker,
+  Input,
+  Tooltip,
+  App,
+} from "antd";
 import * as WorkspaceAPI from "trimble-connect-workspace-api";
 
 import {
@@ -31,6 +40,7 @@ import {
   DeleteOutlined,
   EditOutlined,
   CloseOutlined,
+  CameraOutlined,
 } from "@ant-design/icons";
 
 import {
@@ -77,7 +87,9 @@ const SortableSubItem = React.memo(
     selectObjectsInViewer,
     setActiveItem,
     listRef,
+    onAddCamera,
   }) => {
+    const { message } = App.useApp();
     const [assignDate, setAssignDate] = useState(null);
     const [dateStep, setDateStep] = useState(0);
 
@@ -171,6 +183,23 @@ const SortableSubItem = React.memo(
       event.stopPropagation();
       onDelete(item);
     };
+    const handleGoToCamera = useCallback(async (item) => {
+      if (!item?.camera) {
+        message.warning("This item does not have a saved camera.");
+        return;
+      }
+
+      try {
+        const tcapi = await WorkspaceAPI.connect(window.parent);
+
+        await tcapi.viewer.setCamera(item.camera, {
+          animationTime: 1000,
+        });
+      } catch (error) {
+        console.error("Go to camera failed:", error);
+        message.error("Unable to restore the saved camera.");
+      }
+    }, []);
 
     const contextMenuItems = [
       {
@@ -216,6 +245,15 @@ const SortableSubItem = React.memo(
       },
       {
         type: "divider",
+      },
+      {
+        key: "addView",
+        icon: <CameraOutlined />,
+        label: "Add Camera",
+        onClick: ({ domEvent }) => {
+          domEvent.stopPropagation();
+          onAddCamera(item);
+        },
       },
       {
         key: "delete",
@@ -308,7 +346,21 @@ const SortableSubItem = React.memo(
                 {displayDate}
               </span>
             )}
-
+            {item.camera && (
+              <Tooltip title="Go to saved camera">
+                <CameraOutlined
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleGoToCamera(item);
+                  }}
+                  style={{
+                    color: "#1677ff",
+                    fontSize: 16,
+                    cursor: "pointer",
+                  }}
+                />
+              </Tooltip>
+            )}
             <Button
               type="text"
               icon={<CloseOutlined />}
@@ -321,7 +373,11 @@ const SortableSubItem = React.memo(
   },
 );
 
-const SequenceObjectCollapse = ({ subPlan, activeSimulationItem, displayIndexMap}) => {
+const SequenceObjectCollapse = ({
+  subPlan,
+  activeSimulationItem,
+  displayIndexMap,
+}) => {
   const dispatch = useDispatch();
 
   const sequenceObjects = useSelector(
@@ -366,8 +422,6 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem, displayIndexMap
 
     return subPlanObjects?.objects || [];
   }, [sequenceObjects, subPlan.id]);
-
-
 
   const items = useMemo(() => {
     const result = [];
@@ -414,9 +468,9 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem, displayIndexMap
       const modelGroups = new Map();
 
       objects.forEach((item) => {
-        const runtimeId = item.id || item.runtimeId || item.objectRuntimeId;
+        const runtimeId = item.id ?? item.runtimeId ?? item.objectRuntimeId;
 
-        if (!item.modelId || runtimeId == null) {
+        if (item.modelId == null || runtimeId == null) {
           return;
         }
 
@@ -432,14 +486,32 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem, displayIndexMap
         modelGroups.get(modelKey).objectRuntimeIds.push(runtimeId);
       });
 
-      await tcapi.viewer.setSelection(
-        {
-          modelObjectIds: [...modelGroups.values()],
-        },
-        "set",
-      );
+      const modelObjectIds = [...modelGroups.values()]
+        .map((group) => ({
+          ...group,
+          objectRuntimeIds: [...new Set(group.objectRuntimeIds)],
+        }))
+        .filter((group) => group.objectRuntimeIds.length > 0);
+
+      if (!modelObjectIds.length) {
+        return;
+      }
+
+      const selector = {
+        modelObjectIds,
+      };
+
+      console.log(modelObjectIds);
+
+      // Select objects
+      await tcapi.viewer.setSelection(selector, "set");
+
+      // Zoom and fit selected objects
+      await tcapi.viewer.setCamera(selector, {
+        animationTime: 800,
+      });
     } catch (error) {
-      console.error(error);
+      console.error("Select and zoom objects error:", error);
     }
   }, []);
 
@@ -675,6 +747,30 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem, displayIndexMap
     [currentObjects, updateObjects],
   );
 
+  const handleAddCamera = useCallback(
+    async (item) => {
+      try {
+        const tcapi = await WorkspaceAPI.connect(window.parent);
+
+        const camera = await tcapi.viewer.getCamera();
+
+        const newObjects = currentObjects.map((obj) =>
+          String(obj.id) === String(item.id)
+            ? {
+                ...obj,
+                camera,
+              }
+            : obj,
+        );
+
+        updateObjects(newObjects);
+      } catch (error) {
+        console.error("Save camera failed:", error);
+      }
+    },
+    [currentObjects, updateObjects],
+  );
+
   useEffect(() => {
     if (!currentObjects.length) {
       setFocusedIndex(-1);
@@ -733,6 +829,7 @@ const SequenceObjectCollapse = ({ subPlan, activeSimulationItem, displayIndexMap
                 icon={<FileOutlined />}
                 onAssignDate={handleAssignDate}
                 onDelete={handleDelete}
+                onAddCamera={handleAddCamera}
                 selectObjectsInViewer={selectObjectsInViewer}
                 setActiveItem={setActiveItem}
                 listRef={listRef}
