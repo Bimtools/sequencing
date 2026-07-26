@@ -14,6 +14,7 @@ import {
   CopyOutlined,
   SortAscendingOutlined,
   SelectOutlined,
+  PlayCircleOutlined,
 } from "@ant-design/icons";
 
 const SortableHeader = ({
@@ -26,6 +27,7 @@ const SortableHeader = ({
   onCopySubPlan,
   onSortByDate,
   onHighlightObject,
+  onSimulation,
 }) => {
   const phaseCommentId = useSelector((state) => state.sequence.phaseCommentId);
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
@@ -85,6 +87,23 @@ const SortableHeader = ({
           }}
         >
           Assign Picked Assemblies In Order
+        </Button>
+      ),
+    },
+    onSimulation && {
+      key: "simulation",
+      label: (
+        <Button
+          size="small"
+          type="text"
+          icon={<PlayCircleOutlined />}
+          onClick={(e) => {
+            e.stopPropagation();
+            closeDropdown();
+            onSimulation?.(plan);
+          }}
+        >
+          Run Simulation
         </Button>
       ),
     },

@@ -41,6 +41,7 @@ import {
   EditOutlined,
   CloseOutlined,
   CameraOutlined,
+  EyeInvisibleOutlined,
 } from "@ant-design/icons";
 
 import {
@@ -88,6 +89,8 @@ const SortableSubItem = React.memo(
     setActiveItem,
     listRef,
     onAddCamera,
+    onChangeCamera,
+    onDeleteCamera,
   }) => {
     const { message } = App.useApp();
     const [assignDate, setAssignDate] = useState(null);
@@ -256,6 +259,25 @@ const SortableSubItem = React.memo(
         },
       },
       {
+        key: "updateView",
+        icon: <CameraOutlined />,
+        label: "Change Camera",
+        onClick: ({ domEvent }) => {
+          domEvent.stopPropagation();
+          onChangeCamera(item);
+        },
+      },
+      {
+        key: "deleteView",
+        danger: true,
+        icon: <EyeInvisibleOutlined />,
+        label: "Delete Camera",
+        onClick: ({ domEvent }) => {
+          domEvent.stopPropagation();
+          onDeleteCamera(item);
+        },
+      },
+      {
         key: "delete",
         danger: true,
         icon: <DeleteOutlined />,
@@ -331,7 +353,7 @@ const SortableSubItem = React.memo(
 
               {item.positionCode ? ` [${item.positionCode}]` : ""}
 
-              {displayWeight != null ? ` (${displayWeight} kg)` : ""}
+              {displayWeight != null ? ` (${displayWeight} ${item.weightUnit})` : ""}
             </strong>
 
             <div style={{ flex: 1 }} />
@@ -751,24 +773,75 @@ const SequenceObjectCollapse = ({
     async (item) => {
       try {
         const tcapi = await WorkspaceAPI.connect(window.parent);
-
         const camera = await tcapi.viewer.getCamera();
 
-        const newObjects = currentObjects.map((obj) =>
-          String(obj.id) === String(item.id)
+        if (!camera) return;
+
+        const newObjects = currentObjects.map((obj) => {
+          const objId = obj.id ?? obj.runtimeId ?? obj.objectRuntimeId;
+          const itemId = item.id ?? item.runtimeId ?? item.objectRuntimeId;
+
+          const isSameObject =
+            String(obj.modelId) === String(item.modelId) &&
+            String(objId) === String(itemId);
+
+          return isSameObject
             ? {
                 ...obj,
                 camera,
               }
-            : obj,
-        );
+            : obj;
+        });
 
-        updateObjects(newObjects);
+        await updateObjects(newObjects);
       } catch (error) {
         console.error("Save camera failed:", error);
       }
     },
     [currentObjects, updateObjects],
+  );
+
+  const updateObjectCamera = useCallback(
+    async (item, camera) => {
+      const newObjects = currentObjects.map((obj) =>
+        isSameObject(obj, item)
+          ? {
+              ...obj,
+              camera,
+            }
+          : obj,
+      );
+
+      await updateObjects(newObjects);
+    },
+    [currentObjects, updateObjects],
+  );
+
+  const handleChangeCamera = useCallback(
+    async (item) => {
+      try {
+        const tcapi = await WorkspaceAPI.connect(window.parent);
+        const camera = await tcapi.viewer.getCamera();
+
+        if (!camera) return;
+
+        await updateObjectCamera(item, camera);
+      } catch (error) {
+        console.error("Save camera failed:", error);
+      }
+    },
+    [updateObjectCamera],
+  );
+
+  const handleDeleteCamera = useCallback(
+    async (item) => {
+      try {
+        await updateObjectCamera(item, null);
+      } catch (error) {
+        console.error("Delete camera failed:", error);
+      }
+    },
+    [updateObjectCamera],
   );
 
   useEffect(() => {
@@ -830,6 +903,8 @@ const SequenceObjectCollapse = ({
                 onAssignDate={handleAssignDate}
                 onDelete={handleDelete}
                 onAddCamera={handleAddCamera}
+                onChangeCamera={handleChangeCamera}
+                onDeleteCamera={handleDeleteCamera}
                 selectObjectsInViewer={selectObjectsInViewer}
                 setActiveItem={setActiveItem}
                 listRef={listRef}

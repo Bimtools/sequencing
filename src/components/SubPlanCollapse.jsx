@@ -36,6 +36,183 @@ const getRgbColor = (color) => {
   return `rgb(${color.r ?? 0}, ${color.g ?? 0}, ${color.b ?? 0})`;
 };
 
+const normalizeUnit = (unit) =>
+  String(unit || "")
+    .trim()
+    .toLowerCase();
+
+const roundByDecimals = (value, decimals = 2) => {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  const safeDecimals = Number.isInteger(Number(decimals))
+    ? Math.max(0, Number(decimals))
+    : 2;
+
+  return Number(number.toFixed(safeDecimals));
+};
+
+/*
+ * Giá trị LENGTH lấy từ property model được giả định là mm.
+ */
+const convertLengthFromMm = (value, formatting) => {
+  const lengthMm = Number(value);
+
+  if (!Number.isFinite(lengthMm)) {
+    return 0;
+  }
+
+  const targetUnit = normalizeUnit(formatting?.lengthUnit || "mm");
+  const decimals = formatting?.lengthDecimals ?? 0;
+
+  let convertedValue = lengthMm;
+
+  switch (targetUnit) {
+    case "mm":
+      convertedValue = lengthMm;
+      break;
+
+    case "cm":
+      convertedValue = lengthMm / 10;
+      break;
+
+    case "m":
+      convertedValue = lengthMm / 1000;
+      break;
+
+    case "km":
+      convertedValue = lengthMm / 1_000_000;
+      break;
+
+    case "in":
+      convertedValue = lengthMm / 25.4;
+      break;
+
+    case "ft":
+      convertedValue = lengthMm / 304.8;
+      break;
+
+    case "yd":
+      convertedValue = lengthMm / 914.4;
+      break;
+
+    case "mi":
+      convertedValue = lengthMm / 1_609_344;
+      break;
+
+    /*
+     * US Survey units
+     */
+    case "sin":
+      convertedValue = lengthMm / (1200 / 39.37);
+      break;
+
+    case "sft":
+      convertedValue = lengthMm / (1200 / 3.937);
+      break;
+
+    case "syd":
+      convertedValue = lengthMm / ((1200 / 3.937) * 3);
+      break;
+
+    case "smi":
+      convertedValue = lengthMm / ((1200 / 3.937) * 5280);
+      break;
+
+    default:
+      convertedValue = lengthMm;
+      break;
+  }
+
+  return roundByDecimals(convertedValue, decimals);
+};
+
+/*
+ * Giá trị WEIGHT lấy từ property model được giả định là kg.
+ */
+const convertMassFromKg = (value, formatting) => {
+  const massKg = Number(value);
+
+  if (!Number.isFinite(massKg)) {
+    return 0;
+  }
+
+  const targetUnit = normalizeUnit(formatting?.massUnit || "kg");
+  const decimals = formatting?.massDecimals ?? 2;
+
+  let convertedValue = massKg;
+
+  switch (targetUnit) {
+    case "mg":
+      convertedValue = massKg * 1_000_000;
+      break;
+
+    case "g":
+      convertedValue = massKg * 1000;
+      break;
+
+    case "kg":
+      convertedValue = massKg;
+      break;
+
+    case "t":
+      convertedValue = massKg / 1000;
+      break;
+
+    case "oz":
+      convertedValue = massKg * 35.2739619496;
+      break;
+
+    case "lb":
+      convertedValue = massKg * 2.20462262185;
+      break;
+
+    /*
+     * Trimble imperial mass unit "ton" được xử lý là short ton.
+     */
+    case "ton":
+      convertedValue = massKg / 907.18474;
+      break;
+
+    default:
+      convertedValue = massKg;
+      break;
+  }
+
+  return roundByDecimals(convertedValue, decimals);
+};
+
+const getProjectFormatting = async (tcapi) => {
+  try {
+    const settings = await tcapi.project.getSettings();
+
+    const formatting = settings?.formatting || {};
+
+    return {
+      unitSystem: formatting.unitSystem || "metric",
+
+      lengthUnit: formatting.lengthUnit || "mm",
+      lengthDecimals: formatting.lengthDecimals ?? 0,
+
+      massUnit: formatting.massUnit || "kg",
+      massDecimals: formatting.massDecimals ?? 2,
+    };
+  } catch (error) {
+    console.error("Get project settings failed:", error);
+
+    return {
+      unitSystem: "metric",
+      lengthUnit: "mm",
+      lengthDecimals: 0,
+      massUnit: "kg",
+      massDecimals: 2,
+    };
+  }
+};
+
 const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
   const dispatch = useDispatch();
   const { message } = App.useApp();
@@ -115,256 +292,319 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
   };
 
   const handleAssignObject = async (subPlan) => {
-    const tcapi = await WorkspaceAPI.connect(window.parent);
-    const selections = await tcapi.viewer.getSelection();
+    try {
+      const tcapi = await WorkspaceAPI.connect(window.parent);
 
-    if (!selections?.length) return;
+      const settings = await tcapi.project.getSettings();
+      const formatting = settings?.formatting || {};
 
-    tcapi.viewer.activateTool("pointMarkup");
+      const selections = await tcapi.viewer.getSelection();
 
-    const onMessage = async (event) => {
-      if (event.data.event !== "viewer.onMarkupChanged") return;
+      if (!selections?.length) return;
 
-      window.removeEventListener("message", onMessage);
+      tcapi.viewer.activateTool("pointMarkup");
 
-      const start = event.data.data.data.markup.start;
+      const onMessage = async (event) => {
+        if (event.data.event !== "viewer.onMarkupChanged") return;
 
-      const refPoint = [
-        Number(start.positionX),
-        Number(start.positionY),
-        Number(start.positionZ),
-      ];
+        window.removeEventListener("message", onMessage);
 
-      const newAddedSequenceObjects = [];
+        try {
+          const start = event.data?.data?.data?.markup?.start;
 
-      const createObjectKey = (modelId, objectId) =>
-        `${String(modelId)}::${String(objectId)}`;
-
-      /*
-       * Store all objects that have already been assigned.
-       * If you only want to check duplicates within the current
-       * Sub Plan, use `existingObjects` instead of `sequenceObjects`.
-       */
-      const existingObjectKeys = new Set();
-
-      sequenceObjects.forEach((group) => {
-        (group?.objects || []).forEach((obj) => {
-          if (obj?.modelId == null || obj?.id == null) {
+          if (!start) {
             return;
           }
 
-          existingObjectKeys.add(createObjectKey(obj.modelId, obj.id));
-        });
-      });
+          const refPoint = [
+            Number(start.positionX),
+            Number(start.positionY),
+            Number(start.positionZ),
+          ];
 
-      /*
-       * Prevent duplicate objects within the current assignment.
-       */
-      const newObjectKeys = new Set();
+          const newAddedSequenceObjects = [];
 
-      tcapi.viewer.activateTool("selection");
-      let duplicateCount = 0;
-      for (const selection of selections) {
-        const objBoxes = await tcapi.viewer.getObjectBoundingBoxes(
-          selection.modelId,
-          selection.objectRuntimeIds,
-        );
+          const createObjectKey = (modelId, objectId) =>
+            `${String(modelId)}::${String(objectId)}`;
 
-        const items = await tcapi.viewer.getObjectProperties(
-          selection.modelId,
-          selection.objectRuntimeIds,
-        );
+          const existingObjectKeys = new Set();
 
-        await tcapi.markup.removeMarkups(undefined);
-
-        for (let i = 0; i < objBoxes.length; i++) {
-          const box = objBoxes[i];
-
-          const objectKey = createObjectKey(selection.modelId, box.id);
-
-          if (
-            existingObjectKeys.has(objectKey) ||
-            newObjectKeys.has(objectKey)
-          ) {
-            console.warn("Object has already been assigned:", {
-              modelId: selection.modelId,
-              id: box.id,
-            });
-            duplicateCount++;
-            continue;
-          }
-
-          /*
-           * Mark the object immediately to avoid duplicates
-           * during the current assignment.
-           */
-          newObjectKeys.add(objectKey);
-
-          const center = math.divide(
-            math.add(
-              [
-                1000 * box.boundingBox.min.x,
-                1000 * box.boundingBox.min.y,
-                1000 * box.boundingBox.min.z,
-              ],
-              [
-                1000 * box.boundingBox.max.x,
-                1000 * box.boundingBox.max.y,
-                1000 * box.boundingBox.max.z,
-              ],
-            ),
-            2,
-          );
-
-          const properties = items[i]?.properties || [];
-
-          let asmName = items[i]?.product?.name || "";
-          let asm_pos = "";
-          let positionCode = "";
-          let weight = 0;
-          let asmLength = 0;
-
-          const isCompleted = () =>
-            asm_pos !== "" &&
-            positionCode !== "" &&
-            weight !== 0 &&
-            asmName !== "" &&
-            asmLength !== 0;
-
-          for (const property of properties) {
-            const propertyName = String(property.name || "")
-              .toUpperCase()
-              .trim();
-
-            const isValidPropertyGroup =
-              propertyName.includes("ASSEMBLY") ||
-              propertyName.includes("PROPERTY") ||
-              propertyName.includes("PRODUCT") ||
-              propertyName.includes("COMMON") ||
-              propertyName.includes("QUANTITY");
-
-            if (!isValidPropertyGroup) {
-              continue;
-            }
-
-            for (const asmProperty of property.properties || []) {
-              if (isCompleted()) {
-                break;
+          sequenceObjects.forEach((group) => {
+            (group?.objects || []).forEach((obj) => {
+              if (obj?.modelId == null || obj?.id == null) {
+                return;
               }
 
-              const name = String(asmProperty.name || "").trim();
-              const upperName = name.toUpperCase();
-              const value = asmProperty.value;
+              existingObjectKeys.add(createObjectKey(obj.modelId, obj.id));
+            });
+          });
+
+          const newObjectKeys = new Set();
+
+          await tcapi.viewer.activateTool("selection");
+
+          let duplicateCount = 0;
+
+          for (const selection of selections) {
+            const objBoxes = await tcapi.viewer.getObjectBoundingBoxes(
+              selection.modelId,
+              selection.objectRuntimeIds,
+            );
+
+            const items = await tcapi.viewer.getObjectProperties(
+              selection.modelId,
+              selection.objectRuntimeIds,
+            );
+
+            for (let i = 0; i < objBoxes.length; i++) {
+              const box = objBoxes[i];
+              const objectId = box?.id ?? selection.objectRuntimeIds?.[i];
+
+              if (objectId == null) {
+                continue;
+              }
+
+              const objectKey = createObjectKey(selection.modelId, objectId);
 
               if (
-                !asm_pos &&
-                (name === "Assembly/Cast unit Mark" ||
-                  upperName === "ASSEMBLY_POS")
+                existingObjectKeys.has(objectKey) ||
+                newObjectKeys.has(objectKey)
               ) {
-                asm_pos = String(value || "")
-                  .replace("(?)", "")
+                duplicateCount++;
+                continue;
+              }
+
+              newObjectKeys.add(objectKey);
+
+              const center = math.divide(
+                math.add(
+                  [
+                    Number(1000 * box.boundingBox.min.x).toFixed(0),
+                    Number(1000 * box.boundingBox.min.y).toFixed(0),
+                    Number(1000 * box.boundingBox.min.z).toFixed(0),
+                  ],
+                  [
+                    Number(1000 * box.boundingBox.max.x).toFixed(0),
+                    Number(1000 * box.boundingBox.max.y).toFixed(0),
+                    Number(1000 * box.boundingBox.max.z).toFixed(0),
+                  ],
+                ),
+                2,
+              );
+
+              const properties = items[i]?.properties || [];
+
+              let asmName = items[i]?.product?.name || "";
+              let asmPos = "";
+              let positionCode = "";
+              let weight = 0;
+              let asmLength = 0;
+
+              let cogX = null;
+              let cogY = null;
+              let cogZ = null;
+
+              const isCompleted = () =>
+                asmPos !== "" &&
+                positionCode !== "" &&
+                weight !== 0 &&
+                asmName !== "" &&
+                asmLength !== 0 &&
+                cogX !== null &&
+                cogY !== null &&
+                cogZ !== null;
+
+              for (const property of properties) {
+                const propertyName = String(property.name || "")
+                  .toUpperCase()
                   .trim();
 
-                continue;
-              }
+                // const isValidPropertyGroup =
+                //   propertyName.includes("ASSEMBLY") ||
+                //   propertyName.includes("PROPERTY") ||
+                //   propertyName.includes("PRODUCT") ||
+                //   propertyName.includes("COMMON") ||
+                //   propertyName.includes("QUANTITY");
 
-              if (
-                !positionCode &&
-                (name === "Assembly/Cast unit position code" ||
-                  upperName === "ASSEMBLY_POSITION_CODE")
-              ) {
-                positionCode = String(value || "").trim();
-                continue;
-              }
+                // if (!isValidPropertyGroup) {
+                //   continue;
+                // }
 
-              if (!weight && upperName.includes("WEIGHT") && value != null) {
-                const parsedWeight = Number(value);
+                for (const asmProperty of property.properties || []) {
+                  if (isCompleted()) {
+                    break;
+                  }
 
-                if (Number.isFinite(parsedWeight)) {
-                  weight =
-                    Math.round((parsedWeight + Number.EPSILON) * 100) / 100;
+                  const name = String(asmProperty.name || "").trim();
+                  const upperName = name.toUpperCase();
+                  const value = asmProperty.value;
+
+                  if (
+                    !asmPos &&
+                    (name === "Assembly/Cast unit Mark" ||
+                      upperName === "ASSEMBLY_POS")
+                  ) {
+                    asmPos = String(value || "")
+                      .replace("(?)", "")
+                      .trim();
+
+                    continue;
+                  }
+
+                  if (
+                    !positionCode &&
+                    (name === "Assembly/Cast unit position code" ||
+                      upperName === "ASSEMBLY_POSITION_CODE")
+                  ) {
+                    positionCode = String(value || "").trim();
+                    continue;
+                  }
+
+                  if (
+                    !weight &&
+                    upperName.includes("WEIGHT") &&
+                    value != null
+                  ) {
+                    weight = convertMassFromKg(value, formatting);
+                    continue;
+                  }
+
+                  if (!asmName && upperName.includes("NAME") && value != null) {
+                    asmName = String(value).trim();
+                    continue;
+                  }
+
+                  if (
+                    !asmLength &&
+                    upperName.includes("LENGTH") &&
+                    value != null
+                  ) {
+                    asmLength = convertLengthFromMm(value, formatting);
+                  }
+
+                  if (
+                    cogX === null &&
+                    (upperName.includes("GRAVITY X") ||
+                      upperName.includes("GRAVITYX"))
+                  ) {
+                    cogX = convertLengthFromMm(value, formatting);
+                    continue;
+                  }
+
+                  if (
+                    cogY === null &&
+                    (upperName.includes("GRAVITY Y") ||
+                      upperName.includes("GRAVITYY"))
+                  ) {
+                    cogY = convertLengthFromMm(value, formatting);
+                    continue;
+                  }
+
+                  if (
+                    cogZ === null &&
+                    (upperName.includes("GRAVITY Z") ||
+                      upperName.includes("GRAVITYZ"))
+                  ) {
+                    cogZ = convertLengthFromMm(value, formatting);
+                  }
                 }
 
-                continue;
-              }
-
-              if (!asmName && upperName.includes("NAME") && value != null) {
-                asmName = String(value).trim();
-                continue;
-              }
-
-              if (!asmLength && upperName.includes("LENGTH") && value != null) {
-                const parsedLength = Number(value);
-
-                if (Number.isFinite(parsedLength)) {
-                  asmLength = Math.round(parsedLength);
+                if (isCompleted()) {
+                  break;
                 }
               }
-            }
 
-            if (isCompleted()) {
-              break;
+              const distance = math.distance(refPoint, center);
+
+              newAddedSequenceObjects.push({
+                modelId: selection.modelId,
+                subPlanId: subPlan.id,
+                planId: plan.id,
+                id: objectId,
+                cog: [cogX, cogY, cogZ],
+
+                distance: math.round(distance),
+                center,
+
+                asmPos,
+                date: dayjs().format("DD-MM-YYYY"),
+
+                weight,
+                weightUnit: formatting.massUnit || "kg",
+
+                length: asmLength,
+                lengthUnit: formatting.lengthUnit || "mm",
+
+                name: asmName,
+                positionCode,
+              });
             }
           }
 
-          const distance = math.distance(refPoint, center);
+          await tcapi.markup.removeMarkups(undefined);
 
-          newAddedSequenceObjects.push({
-            modelId: selection.modelId,
-            subPlanId: subPlan.id,
-            planId: plan.id,
-            id: box.id,
-            distance: math.round(distance),
-            center,
-            asmPos: asm_pos,
-            date: dayjs().format("DD-MM-YYYY"),
-            weight,
-            length: asmLength,
-            name: asmName,
-            positionCode,
-          });
+          if (duplicateCount > 0) {
+            message.warning(
+              `${duplicateCount} object(s) have already been existing in the plan.`,
+            );
+          }
+
+          if (!newAddedSequenceObjects.length) {
+            return;
+          }
+
+          newAddedSequenceObjects.sort(
+            (a, b) => Number(a.distance) - Number(b.distance),
+          );
+
+          const existingObjects =
+            sequenceObjects.find(
+              (group) =>
+                group && String(group.subPlanId) === String(subPlan.id),
+            )?.objects ?? [];
+
+          const newObjects = [...existingObjects, ...newAddedSequenceObjects];
+
+          const newAssignedObjects = newObjects.map((object) => ({
+            asmPos: object.asmPos,
+            date: object.date,
+            id: object.id,
+            modelId: object.modelId,
+            planId: object.planId,
+            subPlanId: object.subPlanId,
+            positionCode: object.positionCode,
+            cog: object.cog,
+
+            weight: object.weight,
+            weightUnit: object.weightUnit || formatting.massUnit || "kg",
+
+            length: object.length,
+            lengthUnit: object.lengthUnit || formatting.lengthUnit || "mm",
+
+            name: object.name,
+
+            distance: object.distance,
+            center: object.center,
+            camera: object.camera,
+          }));
+
+          dispatch(
+            SetObjectsRequest({
+              subPlanId: subPlan.id,
+              objects: newAssignedObjects,
+            }),
+          );
+        } catch (error) {
+          console.error("Assign object failed:", error);
+          message.error("Assign object failed.");
         }
-      }
+      };
 
-      if (duplicateCount > 0) {
-        message.warning(
-          `${duplicateCount} object(s) have already been existing in the plan.`,
-        );
-      }
-
-      newAddedSequenceObjects.sort(
-        (a, b) => Number(a.distance) - Number(b.distance),
-      );
-
-      const existingObjects =
-        sequenceObjects.find(
-          (x) => x && String(x.subPlanId) === String(subPlan.id),
-        )?.objects ?? [];
-
-      const newObjects = [...existingObjects, ...newAddedSequenceObjects];
-
-      const newAssignedObjects = newObjects.map((x) => ({
-        asmPos: x.asmPos,
-        date: x.date,
-        id: x.id,
-        modelId: x.modelId,
-        planId: x.planId,
-        subPlanId: x.subPlanId,
-        positionCode: x.positionCode,
-        weight: x.weight,
-        name: x.name,
-        length: x.length,
-      }));
-
-      dispatch(
-        SetObjectsRequest({
-          subPlanId: subPlan.id,
-          objects: newAssignedObjects,
-        }),
-      );
-    };
-
-    window.addEventListener("message", onMessage);
+      window.addEventListener("message", onMessage);
+    } catch (error) {
+      console.error("Start assign object failed:", error);
+      message.error("Cannot start assigning objects.");
+    }
   };
 
   const stopAutoAssign = () => {
@@ -382,191 +622,428 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
   };
 
   const handleAutoAssign = async (subPlan) => {
-    const tcapi = await WorkspaceAPI.connect(window.parent);
-    const selections = await tcapi.viewer.getSelection();
+    try {
+      const tcapi = await WorkspaceAPI.connect(window.parent);
 
-    if (!selections?.length) return;
+      const settings = await tcapi.project.getSettings();
+      const formatting = settings?.formatting || {};
 
-    const createObjectKey = (modelId, objectId) =>
-      `${String(modelId)}::${String(objectId)}`;
+      const selections = await tcapi.viewer.getSelection();
 
-    const existingObjectKeys = new Set();
+      if (!selections?.length) return;
 
-    sequenceObjects.forEach((group) => {
-      (group?.objects || []).forEach((obj) => {
-        if (obj?.modelId == null || obj?.id == null) return;
+      const createObjectKey = (modelId, objectId) =>
+        `${String(modelId)}::${String(objectId)}`;
 
-        existingObjectKeys.add(createObjectKey(obj.modelId, obj.id));
-      });
-    });
-
-    // Prevent duplicates within the current assignment.
-    const newObjectKeys = new Set();
-
-    const newAddedSequenceObjects = [];
-    let duplicateCount = 0;
-    for (const selection of selections) {
-      const items = await tcapi.viewer.getObjectProperties(
-        selection.modelId,
-        selection.objectRuntimeIds,
-      );
-
-      for (let i = 0; i < items.length; i++) {
-        const objectId = selection.objectRuntimeIds[i];
-
-        // Prevent duplicates based on modelId and objectId.
-        const objectKey = createObjectKey(selection.modelId, objectId);
-
-        if (existingObjectKeys.has(objectKey) || newObjectKeys.has(objectKey)) {
-          console.warn("Object has already been assigned.", {
-            modelId: selection.modelId,
-            objectId,
-          });
-          duplicateCount++;
-          continue;
+      const parseNumericValue = (value) => {
+        if (typeof value === "number") {
+          return Number.isFinite(value) ? value : null;
         }
 
-        newObjectKeys.add(objectKey);
+        if (value == null) {
+          return null;
+        }
 
-        const properties = items[i]?.properties || [];
+        const parsed = Number.parseFloat(
+          String(value).replace(/,/g, "").trim(),
+        );
 
-        let asmName = items[i]?.product?.name || "";
-        let asm_pos = "";
-        let positionCode = "";
-        let weight = 0;
-        let asmLength = 0;
+        return Number.isFinite(parsed) ? parsed : null;
+      };
 
-        const isCompleted = () =>
-          asm_pos !== "" &&
-          positionCode !== "" &&
-          weight !== 0 &&
-          asmName !== "" &&
-          asmLength !== 0;
+      const existingObjectKeys = new Set();
 
-        for (const property of properties) {
-          const propertyName = String(property.name || "")
-            .toUpperCase()
-            .trim();
+      sequenceObjects.forEach((group) => {
+        (group?.objects || []).forEach((obj) => {
+          if (obj?.modelId == null || obj?.id == null) return;
 
-          const isValidPropertyGroup =
-            propertyName.includes("ASSEMBLY") ||
-            propertyName.includes("PROPERTY") ||
-            propertyName.includes("PRODUCT") ||
-            propertyName.includes("COMMON") ||
-            propertyName.includes("QUANTITY");
+          existingObjectKeys.add(createObjectKey(obj.modelId, obj.id));
+        });
+      });
 
-          if (!isValidPropertyGroup) {
+      const newObjectKeys = new Set();
+
+      const newAddedSequenceObjects = [];
+      let duplicateCount = 0;
+
+      for (const selection of selections) {
+        const items = await tcapi.viewer.getObjectProperties(
+          selection.modelId,
+          selection.objectRuntimeIds,
+        );
+
+        for (let i = 0; i < items.length; i++) {
+          const objectId = selection.objectRuntimeIds?.[i];
+
+          if (objectId == null) {
             continue;
           }
 
-          for (const asmProperty of property.properties || []) {
+          const objectKey = createObjectKey(selection.modelId, objectId);
+
+          if (
+            existingObjectKeys.has(objectKey) ||
+            newObjectKeys.has(objectKey)
+          ) {
+            console.warn("Object has already been assigned.", {
+              modelId: selection.modelId,
+              objectId,
+            });
+
+            duplicateCount++;
+            continue;
+          }
+
+          newObjectKeys.add(objectKey);
+
+          const properties = items[i]?.properties || [];
+
+          let asmName = items[i]?.product?.name || "";
+          let asmPos = "";
+          let positionCode = "";
+          let weight = 0;
+          let asmLength = 0;
+
+          let cogX = null;
+          let cogY = null;
+          let cogZ = null;
+
+          const isCompleted = () =>
+            asmPos !== "" &&
+            positionCode !== "" &&
+            weight !== 0 &&
+            asmName !== "" &&
+            asmLength !== 0 &&
+            cogX !== null &&
+            cogY !== null &&
+            cogZ !== null;
+
+          for (const property of properties) {
+            const propertyName = String(property.name || "")
+              .toUpperCase()
+              .trim();
+
+            for (const asmProperty of property.properties || []) {
+              if (isCompleted()) {
+                break;
+              }
+
+              const name = String(asmProperty.name || "").trim();
+              const upperName = name.toUpperCase();
+              const value = asmProperty.value;
+              console.log(upperName, value);
+              if (
+                !asmPos &&
+                (name === "Assembly/Cast unit Mark" ||
+                  upperName === "ASSEMBLY_POS")
+              ) {
+                asmPos = String(value || "")
+                  .replace("(?)", "")
+                  .trim();
+
+                continue;
+              }
+
+              if (
+                !positionCode &&
+                (name === "Assembly/Cast unit position code" ||
+                  upperName === "ASSEMBLY_POSITION_CODE")
+              ) {
+                positionCode = String(value || "").trim();
+                continue;
+              }
+
+              if (!weight && upperName.includes("WEIGHT") && value != null) {
+                weight = convertMassFromKg(value, formatting);
+                continue;
+              }
+
+              if (!asmName && upperName.includes("NAME") && value != null) {
+                asmName = String(value).trim();
+                continue;
+              }
+
+              if (!asmLength && upperName.includes("LENGTH") && value != null) {
+                asmLength = convertLengthFromMm(value, formatting);
+
+                continue;
+              }
+
+              if (
+                cogX === null &&
+                (upperName.includes("GRAVITY X") ||
+                  upperName.includes("GRAVITYX"))
+              ) {
+                cogX = convertLengthFromMm(value, formatting);
+                continue;
+              }
+
+              if (
+                cogY === null &&
+                (upperName.includes("GRAVITY Y") ||
+                  upperName.includes("GRAVITYY"))
+              ) {
+                cogY = convertLengthFromMm(value, formatting);
+                continue;
+              }
+
+              if (
+                cogZ === null &&
+                (upperName.includes("GRAVITY Z") ||
+                  upperName.includes("GRAVITYZ"))
+              ) {
+                cogZ = convertLengthFromMm(value, formatting);
+              }
+            }
+
             if (isCompleted()) {
               break;
             }
-
-            const name = String(asmProperty.name || "").trim();
-            const upperName = name.toUpperCase();
-            const value = asmProperty.value;
-
-            if (
-              !asm_pos &&
-              (name === "Assembly/Cast unit Mark" ||
-                upperName === "ASSEMBLY_POS")
-            ) {
-              asm_pos = String(value || "")
-                .replace("(?)", "")
-                .trim();
-
-              continue;
-            }
-
-            if (
-              !positionCode &&
-              (name === "Assembly/Cast unit position code" ||
-                upperName === "ASSEMBLY_POSITION_CODE")
-            ) {
-              positionCode = String(value || "").trim();
-              continue;
-            }
-
-            if (!weight && upperName.includes("WEIGHT") && value != null) {
-              const parsedWeight = Number(value);
-
-              if (Number.isFinite(parsedWeight)) {
-                weight =
-                  Math.round((parsedWeight + Number.EPSILON) * 100) / 100;
-              }
-
-              continue;
-            }
-
-            if (!asmName && upperName.includes("NAME") && value != null) {
-              asmName = String(value).trim();
-              continue;
-            }
-
-            if (!asmLength && upperName.includes("LENGTH") && value != null) {
-              const parsedLength = Number(value);
-
-              if (Number.isFinite(parsedLength)) {
-                asmLength = Math.round(parsedLength);
-              }
-            }
           }
 
-          if (isCompleted()) {
-            break;
-          }
+          const cog =
+            cogX !== null && cogY !== null && cogZ !== null
+              ? [cogX, cogY, cogZ]
+              : null;
+
+          newAddedSequenceObjects.push({
+            modelId: selection.modelId,
+            subPlanId: subPlan.id,
+            planId: plan.id,
+            id: objectId,
+
+            distance: 0,
+            center: [0, 0, 0],
+
+            asmPos,
+            date: dayjs().format("DD-MM-YYYY"),
+
+            cog,
+            cogUnit: formatting.lengthUnit || "mm",
+
+            weight,
+            weightUnit: formatting.massUnit || "kg",
+
+            length: asmLength,
+            lengthUnit: formatting.lengthUnit || "mm",
+
+            name: asmName,
+            positionCode,
+          });
+        }
+      }
+
+      if (duplicateCount > 0) {
+        message.warning(
+          `${duplicateCount} object(s) have already been existing in the plan.`,
+        );
+      }
+
+      if (!newAddedSequenceObjects.length) {
+        return;
+      }
+
+      const existingObjects =
+        sequenceObjects.find(
+          (group) => group && String(group.subPlanId) === String(subPlan.id),
+        )?.objects ?? [];
+
+      const newObjects = [...existingObjects, ...newAddedSequenceObjects];
+
+      const newAssignedObjects = newObjects.map((object) => ({
+        asmPos: object.asmPos,
+        date: object.date,
+        id: object.id,
+        modelId: object.modelId,
+        planId: object.planId,
+        subPlanId: object.subPlanId,
+        positionCode: object.positionCode,
+
+        cog:
+          Array.isArray(object.cog) && object.cog.length === 3
+            ? object.cog
+            : null,
+
+        cogUnit:
+          object.cogUnit || object.lengthUnit || formatting.lengthUnit || "mm",
+
+        weight: object.weight,
+        weightUnit: object.weightUnit || formatting.massUnit || "kg",
+
+        length: object.length,
+        lengthUnit: object.lengthUnit || formatting.lengthUnit || "mm",
+
+        name: object.name,
+
+        distance: object.distance ?? 0,
+        center: object.center ?? [0, 0, 0],
+        camera: object.camera,
+      }));
+
+      dispatch(
+        SetObjectsRequest({
+          subPlanId: subPlan.id,
+          objects: newAssignedObjects,
+        }),
+      );
+    } catch (error) {
+      console.error("Auto assign failed:", error);
+      message.error("Auto assign failed.");
+    }
+  };
+
+  const DATE_FORMATS = ["DD-MM-YYYY", "DD/MM/YYYY", "YYYY-MM-DD", "YYYY/MM/DD"];
+
+  const parseDate = (value) => {
+    if (!value) {
+      return null;
+    }
+
+    if (dayjs.isDayjs(value)) {
+      return value.isValid() ? value : null;
+    }
+
+    const strictDate = dayjs(value, DATE_FORMATS, true);
+
+    if (strictDate.isValid()) {
+      return strictDate;
+    }
+
+    const normalDate = dayjs(value);
+
+    return normalDate.isValid() ? normalDate : null;
+  };
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const handleSimulation = async (subPlan) => {
+    if (!subPlan?.id) {
+      return;
+    }
+
+    const tcapi = await WorkspaceAPI.connect(window.parent);
+
+    const subPlanId = String(subPlan.id);
+
+    // 1) get all objects based on asigned date
+    const items = [];
+
+    sequenceObjects.forEach((group) => {
+      if (!group) {
+        return;
+      }
+
+      const groupSubPlanId = String(group.subPlanId ?? "");
+
+      const objects = group.objects || [];
+
+      objects.forEach((obj) => {
+        const objSubPlanId = String(obj.subPlanId ?? groupSubPlanId ?? "");
+
+        if (objSubPlanId !== subPlanId) {
+          return;
         }
 
-        newAddedSequenceObjects.push({
-          modelId: selection.modelId,
-          subPlanId: subPlan.id,
-          planId: plan.id,
-          id: objectId,
-          distance: 0,
-          center: [0, 0, 0],
-          asmPos: asm_pos,
-          date: dayjs().format("DD-MM-YYYY"),
-          weight,
-          length: asmLength,
-          name: asmName,
-          positionCode,
+        const runtimeId = obj.id ?? obj.runtimeId ?? obj.objectRuntimeId;
+        const modelId = obj.modelId || group.modelId;
+
+        if (runtimeId == null || modelId == null) {
+          return;
+        }
+
+        const parsedDate = parseDate(obj.assignedDate || obj.date);
+
+        if (!parsedDate) {
+          return;
+        }
+
+        items.push({
+          modelId,
+          runtimeId,
+          simulationTime: parsedDate.valueOf(),
+          camera: obj.camera,
         });
+      });
+    });
+
+    if (!items.length) {
+      return;
+    }
+
+    items.sort((a, b) => a.simulationTime - b.simulationTime);
+
+    // 2) get color
+    const color = subPlan.color;
+
+    // 3) Isolate objects
+    const DELAY_MS = 200;
+
+    const modelMap = new Map();
+
+    try {
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index];
+        const modelKey = String(item.modelId);
+
+        if (!modelMap.has(modelKey)) {
+          modelMap.set(modelKey, {
+            modelId: item.modelId,
+            entityIds: [],
+          });
+        }
+
+        modelMap.get(modelKey).entityIds.push(item.runtimeId);
+
+        const accumulatedObjects = Array.from(modelMap.values()).map(
+          (group) => ({
+            ...group,
+            entityIds: [...new Set(group.entityIds)],
+          }),
+        );
+
+        // Isolate objects
+        await tcapi.viewer.isolateEntities(
+          accumulatedObjects.map((group) => ({
+            modelId: group.modelId,
+            entityIds: group.entityIds,
+          })),
+        );
+
+        //Color objects
+        if (color) {
+          await tcapi.viewer.setObjectState(
+            {
+              modelObjectIds: [
+                {
+                  modelId: item.modelId,
+                  objectRuntimeIds: [item.runtimeId],
+                },
+              ],
+            },
+            {
+              color: {
+                r: color.r,
+                g: color.g,
+                b: color.b,
+              },
+              visible: true,
+            },
+          );
+        }
+
+        if (item.camera) {
+          await tcapi.viewer.setCamera(item.camera, {
+            animationTime: 1000,
+          });
+        }
+
+        if (index < items.length - 1) {
+          await sleep(DELAY_MS);
+        }
       }
+    } catch (error) {
+      console.error("handleSimulation error:", error);
     }
-    console.log(duplicateCount);
-    if (duplicateCount > 0) {
-      message.warning(
-        `${duplicateCount} object(s) have already been existing in the plan.`,
-      );
-    }
-    const existingObjects =
-      sequenceObjects.find(
-        (x) => x && String(x.subPlanId) === String(subPlan.id),
-      )?.objects ?? [];
-
-    const newObjects = [...existingObjects, ...newAddedSequenceObjects];
-
-    const newAssignedObjects = newObjects.map((x) => ({
-      asmPos: x.asmPos,
-      date: x.date,
-      id: x.id,
-      modelId: x.modelId,
-      planId: x.planId,
-      subPlanId: x.subPlanId,
-      positionCode: x.positionCode,
-      weight: x.weight,
-      name: x.name,
-      length: x.length,
-    }));
-
-    dispatch(
-      SetObjectsRequest({
-        subPlanId: subPlan.id,
-        objects: newAssignedObjects,
-      }),
-    );
   };
 
   const handleSortByDate = (subPlan) => {
@@ -732,6 +1209,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
         }}
         onAssignObject={() => handleAssignObject(subPlan)}
         onAutoAssign={() => handleAutoAssign(subPlan)}
+        onSimulation={() => handleSimulation(subPlan)}
         onSortByDate={() => handleSortByDate(subPlan)}
         onHighlightObject={() => handleHighlightObject(subPlan)}
       />

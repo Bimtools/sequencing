@@ -1,4 +1,12 @@
-import { Button, DatePicker, Select, Slider, Space } from "antd";
+import {
+  Button,
+  DatePicker,
+  Select,
+  Slider,
+  Space,
+  Switch,
+  Tooltip,
+} from "antd";
 
 import dayjs from "dayjs";
 import customParseFormat from "dayjs/plugin/customParseFormat";
@@ -10,7 +18,13 @@ import {
   PauseCircleOutlined,
 } from "@ant-design/icons";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { useDispatch, useSelector } from "react-redux";
 
@@ -20,43 +34,69 @@ import {
   SetActiveSimulationItem,
   SetSimulationDateRange,
 } from "../store/sequence/action";
-import { Await } from "react-router-dom";
 
 dayjs.extend(customParseFormat);
 
-const DATE_FORMATS = ["DD-MM-YYYY", "DD/MM/YYYY", "YYYY-MM-DD", "YYYY/MM/DD"];
+const DATE_FORMATS = [
+  "DD-MM-YYYY",
+  "DD/MM/YYYY",
+  "YYYY-MM-DD",
+  "YYYY/MM/DD",
+];
 
 export default function Simulation() {
   const dispatch = useDispatch();
 
-  const plans = useSelector((state) => state.sequence.plans || []);
+  const plans = useSelector(
+    (state) => state.sequence.plans || [],
+  );
 
   const sequenceObjects = useSelector(
     (state) => state.sequence.sequenceObjects || [],
   );
 
-  const subPlans = useSelector((state) => state.sequence.subPlans || []);
+  const subPlans = useSelector(
+    (state) => state.sequence.subPlans || [],
+  );
 
   const tcapiRef = useRef(null);
   const intervalRef = useRef(null);
 
+  /*
+   * Cho biết người dùng đã kích hoạt simulation bằng:
+   * - Play
+   * - Next
+   * - Previous
+   * - Slider
+   *
+   * Khi sequenceObjects thay đổi do thêm object mới,
+   * ref này không tự gọi isolateEntities.
+   */
+  const simulationActivatedRef = useRef(false);
+
+  // Cache IFCGRID objects để không gọi getObjects nhiều lần.
+  const gridObjectsRef = useRef(null);
+
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
-
   const [delay, setDelay] = useState(200);
 
   const [selectedPlanIds, setSelectedPlanIds] = useState([]);
+  const [selectedSubPlanIds, setSelectedSubPlanIds] = useState([]);
 
   const [startDate, setStartDate] = useState(null);
-
   const [endDate, setEndDate] = useState(null);
+
+  const [showGrid, setShowGrid] = useState(false);
 
   // =====================================================
   // DATE PARSER
   // =====================================================
 
   const parseDate = useCallback((value) => {
-    if (!value) return null;
+    if (!value) {
+      return null;
+    }
 
     if (dayjs.isDayjs(value)) {
       return value.isValid() ? value : null;
@@ -78,34 +118,88 @@ export default function Simulation() {
   // =====================================================
 
   useEffect(() => {
-    const validPlanIds = plans.map((plan) => String(plan.id));
+    const validPlanIds = plans.map((plan) =>
+      String(plan.id),
+    );
 
     setSelectedPlanIds((current) => {
-      /*
-       * Firt load:
-       * Select All Plans.
-       */
       if (!current.length) {
         return validPlanIds;
       }
 
-      /*
-       * Remove deleted plan.
-       */
       const existingSelectedIds = current.filter((id) =>
         validPlanIds.includes(String(id)),
       );
 
-      /*
-       Reselect all plan
-       */
       if (!existingSelectedIds.length) {
         return validPlanIds;
       }
 
-      return existingSelectedIds;
+      /*
+       * Thêm các plan mới vào danh sách chọn mặc định,
+       * nhưng vẫn giữ lựa chọn hiện tại.
+       */
+      const newPlanIds = validPlanIds.filter(
+        (id) => !existingSelectedIds.includes(id),
+      );
+
+      return [...existingSelectedIds, ...newPlanIds];
     });
   }, [plans]);
+
+  // =====================================================
+  // SUB PLANS AVAILABLE FOR SELECTED PLANS
+  // =====================================================
+
+  const availableSubPlans = useMemo(() => {
+    const selectedPlanSet = new Set(
+      selectedPlanIds.map((id) => String(id)),
+    );
+
+    return subPlans.filter((subPlan) => {
+      const subPlanPlanId =
+        subPlan.planId ?? subPlan.parentPlanId;
+
+      /*
+       * Nếu sub plan không có planId thì vẫn hiển thị vì
+       * không thể xác định chính xác plan cha.
+       */
+      if (subPlanPlanId == null) {
+        return true;
+      }
+
+      return selectedPlanSet.has(String(subPlanPlanId));
+    });
+  }, [subPlans, selectedPlanIds]);
+
+  // =====================================================
+  // DEFAULT SELECT ALL AVAILABLE SUB PLANS
+  // =====================================================
+
+  useEffect(() => {
+    const validSubPlanIds = availableSubPlans.map(
+      (subPlan) => String(subPlan.id),
+    );
+
+    setSelectedSubPlanIds((current) => {
+      const existingSelectedIds = current.filter((id) =>
+        validSubPlanIds.includes(String(id)),
+      );
+
+      if (!existingSelectedIds.length) {
+        return validSubPlanIds;
+      }
+
+      /*
+       * Tự động bổ sung sub plan mới sau khi tạo.
+       */
+      const newSubPlanIds = validSubPlanIds.filter(
+        (id) => !existingSelectedIds.includes(id),
+      );
+
+      return [...existingSelectedIds, ...newSubPlanIds];
+    });
+  }, [availableSubPlans]);
 
   // =====================================================
   // BUILD ALL SIMULATION ITEMS
@@ -120,29 +214,42 @@ export default function Simulation() {
     let originalIndex = 0;
 
     sequenceObjects.forEach((group, groupIndex) => {
-      if (!group) return;
+      if (!group) {
+        return;
+      }
 
       const groupPlanId = String(group.planId || "");
 
-      const plan = plans.find((item) => String(item.id) === groupPlanId);
+      const plan = plans.find(
+        (item) => String(item.id) === groupPlanId,
+      );
 
       const objects = group.objects || [];
 
       objects.forEach((obj, objectIndex) => {
-        const runtimeId = obj.id || obj.runtimeId || obj.objectRuntimeId;
+        const runtimeId =
+          obj.id ??
+          obj.runtimeId ??
+          obj.objectRuntimeId;
 
-        const planId = String(group.planId || obj.planId || "");
+        const planId = String(
+          group.planId ?? obj.planId ?? "",
+        );
 
-        const subPlanId = String(group.subPlanId || obj.subPlanId || "");
+        const subPlanId = String(
+          group.subPlanId ?? obj.subPlanId ?? "",
+        );
 
-        const simulationDate = obj.assignedDate || obj.date;
+        const simulationDate =
+          obj.assignedDate || obj.date;
 
         const parsedDate = parseDate(simulationDate);
 
-        /*
-         Remove invalid object from plan
-         */
         if (!parsedDate) {
+          return;
+        }
+
+        if (runtimeId == null) {
           return;
         }
 
@@ -157,7 +264,10 @@ export default function Simulation() {
 
           originalIndex: originalIndex++,
 
-          planName: plan?.name || group.planName || `Plan ${groupIndex + 1}`,
+          planName:
+            plan?.name ||
+            group.planName ||
+            `Plan ${groupIndex + 1}`,
 
           name:
             obj.asmPos ||
@@ -171,7 +281,8 @@ export default function Simulation() {
 
           id: String(runtimeId),
 
-          simulationDate: parsedDate.format("DD-MM-YYYY"),
+          simulationDate:
+            parsedDate.format("DD-MM-YYYY"),
 
           simulationTime: parsedDate.valueOf(),
         });
@@ -188,18 +299,36 @@ export default function Simulation() {
   }, [sequenceObjects, plans, parseDate]);
 
   // =====================================================
-  // FILTER BY PLAN + START DATE + END DATE
+  // FILTER ITEMS
   // =====================================================
 
   const items = useMemo(() => {
-    const selectedPlanSet = new Set(selectedPlanIds.map((id) => String(id)));
+    const selectedPlanSet = new Set(
+      selectedPlanIds.map((id) => String(id)),
+    );
 
-    const start = startDate ? dayjs(startDate).startOf("day") : null;
+    const selectedSubPlanSet = new Set(
+      selectedSubPlanIds.map((id) => String(id)),
+    );
 
-    const end = endDate ? dayjs(endDate).endOf("day") : null;
+    const start = startDate
+      ? dayjs(startDate).startOf("day")
+      : null;
+
+    const end = endDate
+      ? dayjs(endDate).endOf("day")
+      : null;
 
     const filtered = allItems.filter((item) => {
       if (!selectedPlanSet.has(String(item.planId))) {
+        return false;
+      }
+
+      if (
+        item.subPlanId &&
+        selectedSubPlanSet.size &&
+        !selectedSubPlanSet.has(String(item.subPlanId))
+      ) {
         return false;
       }
 
@@ -220,15 +349,24 @@ export default function Simulation() {
       return true;
     });
 
-    return filtered.map((item, i) => ({
+    return filtered.map((item, itemIndex) => ({
       ...item,
 
       value:
         filtered.length === 1
           ? 0
-          : Math.round((i / (filtered.length - 1)) * 100),
+          : Math.round(
+              (itemIndex / (filtered.length - 1)) * 100,
+            ),
     }));
-  }, [allItems, selectedPlanIds, startDate, endDate, parseDate]);
+  }, [
+    allItems,
+    selectedPlanIds,
+    selectedSubPlanIds,
+    startDate,
+    endDate,
+    parseDate,
+  ]);
 
   const current = items[index];
 
@@ -241,17 +379,29 @@ export default function Simulation() {
     setIndex(0);
 
     clearInterval(intervalRef.current);
-  }, [selectedPlanIds, startDate, endDate]);
+  }, [
+    selectedPlanIds,
+    selectedSubPlanIds,
+    startDate,
+    endDate,
+  ]);
 
+  /*
+   * Chỉ kiểm tra index.
+   * Không gọi isolateEntities khi items thay đổi.
+   */
   useEffect(() => {
     if (!items.length) {
       setIndex(0);
       setPlaying(false);
+
+      clearInterval(intervalRef.current);
+
       return;
     }
 
     if (index >= items.length) {
-      setIndex(0);
+      setIndex(items.length - 1);
     }
   }, [items.length, index]);
 
@@ -262,9 +412,13 @@ export default function Simulation() {
   useEffect(() => {
     dispatch(
       SetSimulationDateRange({
-        startDate: startDate ? startDate.format("DD-MM-YYYY") : null,
+        startDate: startDate
+          ? startDate.format("DD-MM-YYYY")
+          : null,
 
-        endDate: endDate ? endDate.format("DD-MM-YYYY") : null,
+        endDate: endDate
+          ? endDate.format("DD-MM-YYYY")
+          : null,
       }),
     );
   }, [startDate, endDate, dispatch]);
@@ -273,246 +427,411 @@ export default function Simulation() {
   // TRIMBLE CONNECT API
   // =====================================================
 
-  const getTcapi = async () => {
+  const getTcapi = useCallback(async () => {
     if (!tcapiRef.current) {
-      tcapiRef.current = await WorkspaceAPI.connect(window.parent);
+      tcapiRef.current =
+        await WorkspaceAPI.connect(window.parent);
     }
 
     return tcapiRef.current;
-  };
+  }, []);
 
   const buildAccumulatedObjects = useCallback(
     (toIndex) => {
       const modelMap = new Map();
 
-      items.slice(0, toIndex + 1).forEach((item) => {
-        if (!item.modelId || item.runtimeId == null) {
-          return;
-        }
+      items
+        .slice(0, toIndex + 1)
+        .forEach((item) => {
+          if (
+            item.modelId == null ||
+            item.runtimeId == null
+          ) {
+            return;
+          }
 
-        const modelId = String(item.modelId);
+          const modelKey = String(item.modelId);
 
-        if (!modelMap.has(modelId)) {
-          modelMap.set(modelId, {
-            modelId: item.modelId,
+          if (!modelMap.has(modelKey)) {
+            modelMap.set(modelKey, {
+              modelId: item.modelId,
+              entityIds: [],
+            });
+          }
 
-            entityIds: [],
-          });
-        }
+          modelMap
+            .get(modelKey)
+            .entityIds.push(item.runtimeId);
+        });
 
-        modelMap.get(modelId).entityIds.push(item.runtimeId);
-      });
-
-      return Array.from(modelMap.values());
+      return Array.from(modelMap.values()).map(
+        (group) => ({
+          ...group,
+          entityIds: [...new Set(group.entityIds)],
+        }),
+      );
     },
     [items],
   );
 
-  const selectObjectInTrimble = async (item) => {
-    if (!item?.modelId || item?.runtimeId == null) {
-      return;
-    }
+  const selectObjectInTrimble = useCallback(
+    async (item) => {
+      if (
+        item?.modelId == null ||
+        item?.runtimeId == null
+      ) {
+        return;
+      }
 
-    const tcapi = await getTcapi();
-
-    await tcapi.viewer.setSelection(
-      {
-        modelObjectIds: [
-          {
-            modelId: item.modelId,
-
-            objectRuntimeIds: [item.runtimeId],
-          },
-        ],
-      },
-      "set",
-    );
-  };
-
-  const colorObjectInTrimble = async (item) => {
-    if (!item?.modelId || item?.runtimeId == null) {
-      return;
-    }
-
-    const subPlan = subPlans.find(
-      (subPlanItem) => String(subPlanItem.id) === String(item.subPlanId),
-    );
-
-    if (!subPlan?.color) {
-      return;
-    }
-
-    const tcapi = await getTcapi();
-
-    await tcapi.viewer.setObjectState(
-      {
-        modelObjectIds: [
-          {
-            modelId: item.modelId,
-
-            objectRuntimeIds: [item.runtimeId],
-          },
-        ],
-      },
-      {
-        color: {
-          r: subPlan.color.r,
-          g: subPlan.color.g,
-          b: subPlan.color.b,
-        },
-
-        visible: true,
-      },
-    );
-  };
-
-  const gotoCamera = async (item, objects) => {
-    try {
       const tcapi = await getTcapi();
 
-      if (item?.camera) {
-        await tcapi.viewer.setCamera(item.camera, {
-          animationTime: 1000,
-        });
+      await tcapi.viewer.setSelection(
+        {
+          modelObjectIds: [
+            {
+              modelId: item.modelId,
+              objectRuntimeIds: [item.runtimeId],
+            },
+          ],
+        },
+        "set",
+      );
+    },
+    [getTcapi],
+  );
+
+  const colorObjectInTrimble = useCallback(
+    async (item) => {
+      if (
+        item?.modelId == null ||
+        item?.runtimeId == null
+      ) {
         return;
       }
 
-      if (!objects?.length) {
+      const subPlan = subPlans.find(
+        (subPlanItem) =>
+          String(subPlanItem.id) ===
+          String(item.subPlanId),
+      );
+
+      if (!subPlan?.color) {
         return;
       }
 
-      const selector = {
-        modelObjectIds: objects
-          .filter(
-            (group) =>
-              group.modelId != null &&
-              Array.isArray(group.entityIds) &&
-              group.entityIds.length > 0,
-          )
-          .map((group) => ({
-            modelId: group.modelId,
-            objectRuntimeIds: group.entityIds,
-          })),
-      };
+      const tcapi = await getTcapi();
 
-      if (!selector.modelObjectIds.length) {
-        return;
+      await tcapi.viewer.setObjectState(
+        {
+          modelObjectIds: [
+            {
+              modelId: item.modelId,
+              objectRuntimeIds: [item.runtimeId],
+            },
+          ],
+        },
+        {
+          color: {
+            r: subPlan.color.r,
+            g: subPlan.color.g,
+            b: subPlan.color.b,
+          },
+
+          visible: true,
+        },
+      );
+    },
+    [getTcapi, subPlans],
+  );
+
+  const gotoCamera = useCallback(
+    async (item, objects) => {
+      try {
+        const tcapi = await getTcapi();
+
+        if (item?.camera) {
+          await tcapi.viewer.setCamera(item.camera, {
+            animationTime: 1000,
+          });
+
+          return;
+        }
+
+        /*
+         * Có thể bật lại đoạn setCamera theo selector nếu cần.
+         */
+
+        // if (!objects?.length) {
+        //   return;
+        // }
+
+        // const selector = {
+        //   modelObjectIds: objects
+        //     .filter(
+        //       (group) =>
+        //         group.modelId != null &&
+        //         Array.isArray(group.entityIds) &&
+        //         group.entityIds.length > 0,
+        //     )
+        //     .map((group) => ({
+        //       modelId: group.modelId,
+        //       objectRuntimeIds: [
+        //         ...new Set(group.entityIds),
+        //       ],
+        //     })),
+        // };
+
+        // if (!selector.modelObjectIds.length) {
+        //   return;
+        // }
+
+        // await tcapi.viewer.setCamera(selector, {
+        //   animationTime: 1000,
+        // });
+      } catch (error) {
+        console.error("gotoCamera error:", error);
       }
+    },
+    [getTcapi],
+  );
 
-      await tcapi.viewer.setCamera(selector, {
-        animationTime: 1000,
-      });
-    } catch (error) {
-      console.error("gotoCamera error:", error);
-    }
-  };
-
-  const isolateObjectsInTrimble = async (objects) => {
-    if (!objects?.length) {
-      return;
+  const getGridObjects = useCallback(async () => {
+    if (gridObjectsRef.current) {
+      return gridObjectsRef.current;
     }
 
     const tcapi = await getTcapi();
 
-    const isolateObjects = objects.map((group) => ({
-      modelId: group.modelId,
-      entityIds: [...(group.entityIds || [])],
-    }));
-
-    const modelMap = new Map(
-      isolateObjects.map((group) => [String(group.modelId), group]),
-    );
-
-    const grids = await tcapi.viewer.getObjects({
+    const result = await tcapi.viewer.getObjects({
       parameter: {
         class: "IFCGRID",
       },
     });
 
-    grids.forEach((group) => {
-      const key = String(group.modelId);
+    gridObjectsRef.current = result || [];
 
-      const gridIds = (group.objects || [])
-        .map((item) => item.id)
-        .filter((id) => id != null);
+    return gridObjectsRef.current;
+  }, [getTcapi]);
 
-      if (modelMap.has(key)) {
-        const target = modelMap.get(key);
-
-        target.entityIds = [...new Set([...target.entityIds, ...gridIds])];
-      } else {
-        const target = {
-          modelId: group.modelId,
-          entityIds: [...new Set(gridIds)],
-        };
-
-        isolateObjects.push(target);
-        modelMap.set(key, target);
+  /*
+   * includeGrid được truyền trực tiếp thay vì phụ thuộc showGrid.
+   *
+   * Nhờ vậy khi showGrid hoặc sequenceObjects thay đổi,
+   * function không tự chạy lại thông qua useEffect.
+   */
+  const isolateObjectsInTrimble = useCallback(
+    async (objects, includeGrid = false) => {
+      if (!objects?.length) {
+        return;
       }
-    });
 
-    await tcapi.viewer.isolateEntities(isolateObjects);
-  };
+      const tcapi = await getTcapi();
+
+      const isolateObjects = objects
+        .filter(
+          (group) =>
+            group?.modelId != null &&
+            Array.isArray(group.entityIds) &&
+            group.entityIds.length > 0,
+        )
+        .map((group) => ({
+          modelId: group.modelId,
+          entityIds: [...new Set(group.entityIds)],
+        }));
+
+      if (!isolateObjects.length) {
+        return;
+      }
+
+      const modelMap = new Map(
+        isolateObjects.map((group) => [
+          String(group.modelId),
+          group,
+        ]),
+      );
+
+      if (includeGrid) {
+        const grids = await getGridObjects();
+
+        (grids || []).forEach((group) => {
+          if (group?.modelId == null) {
+            return;
+          }
+
+          const gridIds = (group.objects || [])
+            .map((gridObject) => gridObject.id)
+            .filter((gridId) => gridId != null);
+
+          if (!gridIds.length) {
+            return;
+          }
+
+          const modelKey = String(group.modelId);
+
+          if (modelMap.has(modelKey)) {
+            const target = modelMap.get(modelKey);
+
+            target.entityIds = [
+              ...new Set([
+                ...target.entityIds,
+                ...gridIds,
+              ]),
+            ];
+          } else {
+            const target = {
+              modelId: group.modelId,
+              entityIds: [...new Set(gridIds)],
+            };
+
+            isolateObjects.push(target);
+            modelMap.set(modelKey, target);
+          }
+        });
+      }
+
+      await tcapi.viewer.isolateEntities(
+        isolateObjects,
+      );
+    },
+    [getTcapi, getGridObjects],
+  );
+
   // =====================================================
   // NAVIGATION
   // =====================================================
 
   const goToIndex = useCallback(
     async (newIndex) => {
-      if (!items.length) return;
+      if (!items.length) {
+        return;
+      }
 
-      const safeIndex = Math.max(0, Math.min(newIndex, items.length - 1));
+      const safeIndex = Math.max(
+        0,
+        Math.min(newIndex, items.length - 1),
+      );
 
       const item = items[safeIndex];
 
-      if (!item) return;
+      if (!item) {
+        return;
+      }
+
+      /*
+       * Simulation chỉ được đánh dấu active khi người dùng
+       * thực sự tương tác với Play/Next/Previous/Slider.
+       */
+      simulationActivatedRef.current = true;
 
       setIndex(safeIndex);
 
       dispatch(
         SetActiveSimulationItem({
           planId: String(item.planId),
-
           subPlanId: String(item.subPlanId),
-
           modelId: item.modelId,
-
           id: String(item.id),
-
           runtimeId: item.runtimeId,
         }),
       );
 
       try {
-        const accumulatedObjects = buildAccumulatedObjects(safeIndex);
+        const accumulatedObjects =
+          buildAccumulatedObjects(safeIndex);
 
-        await isolateObjectsInTrimble(accumulatedObjects);
+        await isolateObjectsInTrimble(
+          accumulatedObjects,
+          showGrid,
+        );
 
         await gotoCamera(item, accumulatedObjects);
-
         await colorObjectInTrimble(item);
-
         await selectObjectInTrimble(item);
       } catch (error) {
-        console.error("Simulation viewer error:", error);
+        console.error(
+          "Simulation viewer error:",
+          error,
+        );
       }
     },
-    [items, dispatch, buildAccumulatedObjects, subPlans],
+    [
+      items,
+      dispatch,
+      showGrid,
+      buildAccumulatedObjects,
+      isolateObjectsInTrimble,
+      gotoCamera,
+      colorObjectInTrimble,
+      selectObjectInTrimble,
+    ],
   );
 
-  const next = () => {
+  // =====================================================
+  // SHOW/HIDE GRID
+  // =====================================================
+
+  const handleShowGridChange = useCallback(
+    async (checked) => {
+      setShowGrid(checked);
+
+      /*
+       * Nếu người dùng chưa chạy simulation thì chỉ cập nhật
+       * state của Switch, không isolate model.
+       */
+      if (!simulationActivatedRef.current) {
+        return;
+      }
+
+      if (
+        !items.length ||
+        index < 0 ||
+        index >= items.length
+      ) {
+        return;
+      }
+
+      try {
+        const accumulatedObjects =
+          buildAccumulatedObjects(index);
+
+        /*
+         * Truyền checked trực tiếp vì setShowGrid là async,
+         * showGrid trong render hiện tại vẫn có thể là giá trị cũ.
+         */
+        await isolateObjectsInTrimble(
+          accumulatedObjects,
+          checked,
+        );
+      } catch (error) {
+        console.error(
+          "Update grid visibility error:",
+          error,
+        );
+      }
+    },
+    [
+      items.length,
+      index,
+      buildAccumulatedObjects,
+      isolateObjectsInTrimble,
+    ],
+  );
+
+  const next = useCallback(() => {
     setPlaying(false);
+    clearInterval(intervalRef.current);
 
     goToIndex(index + 1);
-  };
+  }, [index, goToIndex]);
 
-  const prev = () => {
+  const prev = useCallback(() => {
     setPlaying(false);
+    clearInterval(intervalRef.current);
 
     goToIndex(index - 1);
-  };
+  }, [index, goToIndex]);
 
-  const togglePlay = async () => {
+  const togglePlay = useCallback(async () => {
     if (!items.length) {
       return;
     }
@@ -526,7 +845,12 @@ export default function Simulation() {
     }
 
     setPlaying((currentPlaying) => !currentPlaying);
-  };
+  }, [
+    items.length,
+    playing,
+    index,
+    goToIndex,
+  ]);
 
   // =====================================================
   // AUTO PLAY
@@ -535,7 +859,6 @@ export default function Simulation() {
   useEffect(() => {
     if (!playing || !items.length) {
       clearInterval(intervalRef.current);
-
       return;
     }
 
@@ -544,8 +867,8 @@ export default function Simulation() {
 
       if (nextIndex >= items.length) {
         clearInterval(intervalRef.current);
-
         setPlaying(false);
+
         return;
       }
 
@@ -555,7 +878,13 @@ export default function Simulation() {
     return () => {
       clearInterval(intervalRef.current);
     };
-  }, [playing, delay, index, items.length, goToIndex]);
+  }, [
+    playing,
+    delay,
+    index,
+    items.length,
+    goToIndex,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -568,27 +897,31 @@ export default function Simulation() {
   // =====================================================
 
   const marks = useMemo(() => {
-    return items.reduce((result, item, itemIndex) => {
-      result[item.value] = {
-        label: (
-          <div
-            onClick={() => {
-              setPlaying(false);
+    return items.reduce(
+      (result, item, itemIndex) => {
+        result[item.value] = {
+          label: (
+            <div
+              onClick={() => {
+                setPlaying(false);
+                clearInterval(intervalRef.current);
 
-              goToIndex(itemIndex);
-            }}
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              cursor: "pointer",
-            }}
-          />
-        ),
-      };
+                goToIndex(itemIndex);
+              }}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                cursor: "pointer",
+              }}
+            />
+          ),
+        };
 
-      return result;
-    }, {});
+        return result;
+      },
+      {},
+    );
   }, [items, goToIndex]);
 
   // =====================================================
@@ -599,20 +932,33 @@ export default function Simulation() {
     setPlaying(false);
     setIndex(0);
 
+    clearInterval(intervalRef.current);
+
     setSelectedPlanIds(values || []);
+  };
+
+  const handleSubPlanChange = (values) => {
+    setPlaying(false);
+    setIndex(0);
+
+    clearInterval(intervalRef.current);
+
+    setSelectedSubPlanIds(values || []);
   };
 
   const handleStartDateChange = (date) => {
     setPlaying(false);
     setIndex(0);
 
+    clearInterval(intervalRef.current);
+
     setStartDate(date);
 
-    /*
-     * If Start Date > End Date,
-     * Delete End Date.
-     */
-    if (date && endDate && date.isAfter(endDate, "day")) {
+    if (
+      date &&
+      endDate &&
+      date.isAfter(endDate, "day")
+    ) {
       setEndDate(null);
     }
   };
@@ -621,13 +967,15 @@ export default function Simulation() {
     setPlaying(false);
     setIndex(0);
 
+    clearInterval(intervalRef.current);
+
     setEndDate(date);
 
-    /*
-     * If End Date < Start Date,
-     * Delete Start Date.
-     */
-    if (date && startDate && date.isBefore(startDate, "day")) {
+    if (
+      date &&
+      startDate &&
+      date.isBefore(startDate, "day")
+    ) {
       setStartDate(null);
     }
   };
@@ -637,7 +985,11 @@ export default function Simulation() {
   // =====================================================
 
   if (!allItems.length) {
-    return <div>There is no simulation data available</div>;
+    return (
+      <div>
+        There is no simulation data available
+      </div>
+    );
   }
 
   // =====================================================
@@ -653,9 +1005,12 @@ export default function Simulation() {
           marginBottom: 24,
         }}
       >
-        {/* PLAN */}
+        {/* PLAN + GRID */}
         <div
           style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
             width: "100%",
             marginBottom: 8,
           }}
@@ -670,11 +1025,76 @@ export default function Simulation() {
             placeholder="Select plans"
             optionFilterProp="label"
             onChange={handlePlanChange}
-            style={{ width: "100%" }}
+            style={{
+              flex: 1,
+              minWidth: 0,
+            }}
             options={plans.map((plan) => ({
               value: String(plan.id),
               label: plan.name || "Unnamed Plan",
             }))}
+          />
+
+          <Tooltip
+            title={
+              showGrid ? "Hide Grid" : "Show Grid"
+            }
+          >
+            <Switch
+              checked={showGrid}
+              onChange={handleShowGridChange}
+              size="small"
+            />
+          </Tooltip>
+        </div>
+
+        {/* SUB PLAN */}
+        <div
+          style={{
+            width: "100%",
+            marginBottom: 8,
+          }}
+        >
+          <Select
+            mode="multiple"
+            size="small"
+            allowClear
+            showSearch
+            maxTagCount="responsive"
+            value={selectedSubPlanIds}
+            placeholder="Select sub plans"
+            optionFilterProp="label"
+            onChange={handleSubPlanChange}
+            disabled={!availableSubPlans.length}
+            style={{
+              width: "100%",
+            }}
+            options={availableSubPlans.map(
+              (subPlan) => {
+                const subPlanPlanId =
+                  subPlan.planId ??
+                  subPlan.parentPlanId;
+
+                const parentPlan = plans.find(
+                  (plan) =>
+                    String(plan.id) ===
+                    String(subPlanPlanId),
+                );
+
+                const subPlanName =
+                  subPlan.name ||
+                  "Unnamed Sub Plan";
+
+                const label = parentPlan?.name
+                  ? `${subPlanName} (${parentPlan.name})`
+                  : subPlanName;
+
+                return {
+                  value: String(subPlan.id),
+                  label,
+                };
+              },
+            )}
           />
         </div>
 
@@ -682,14 +1102,17 @@ export default function Simulation() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gridTemplateColumns:
+              "repeat(2, minmax(0, 1fr))",
             gap: 8,
             width: "100%",
           }}
         >
           <DatePicker
             size="small"
-            style={{ width: "100%" }}
+            style={{
+              width: "100%",
+            }}
             format="DD-MM-YYYY"
             placeholder="Start Date"
             value={startDate}
@@ -699,13 +1122,18 @@ export default function Simulation() {
                 return false;
               }
 
-              return date.isAfter(endDate, "day");
+              return date.isAfter(
+                endDate,
+                "day",
+              );
             }}
           />
 
           <DatePicker
             size="small"
-            style={{ width: "100%" }}
+            style={{
+              width: "100%",
+            }}
             format="DD-MM-YYYY"
             placeholder="End Date"
             value={endDate}
@@ -715,16 +1143,24 @@ export default function Simulation() {
                 return false;
               }
 
-              return date.isBefore(startDate, "day");
+              return date.isBefore(
+                startDate,
+                "day",
+              );
             }}
           />
         </div>
       </div>
 
       {!selectedPlanIds.length ? (
-        <div>Please select at least one plan</div>
+        <div>
+          Please select at least one plan
+        </div>
       ) : !items.length ? (
-        <div>No objects match the selected plans and date range</div>
+        <div>
+          No objects match the selected plans and
+          date range
+        </div>
       ) : (
         <>
           {/* CURRENT ITEM */}
@@ -739,40 +1175,70 @@ export default function Simulation() {
               fontSize: 16,
             }}
           >
-            <span>{current?.planName || "-"}</span>
-
             <span>
-              {`${current?.asmPos ?? ""} Grid: ${current?.positionCode ?? ""}`}
+              {current?.planName || "-"}
             </span>
 
             <span>
-              {`${Number(Number(current?.weight || 0).toFixed(2))}kg`}
+              {`${current?.asmPos ?? ""} Grid: ${
+                current?.positionCode ?? ""
+              }`}
             </span>
 
-            <span>{current?.simulationDate || "-"}</span>
+            <span>
+              {`${Number(
+                Number(
+                  current?.weight || 0,
+                ).toFixed(3),
+              )} ${current?.weightUnit || ""}`}
+            </span>
+
+            <span>
+              {current?.simulationDate || "-"}
+            </span>
           </div>
 
           {/* SIMULATION SLIDER */}
           <Slider
-            style={{ width: "100%" }}
+            style={{
+              width: "100%",
+            }}
             min={0}
             max={100}
             value={current?.value ?? 0}
             marks={marks}
-            tooltip={{ open: false }}
+            tooltip={{
+              open: false,
+            }}
             onChange={(value) => {
               const nearestIndex = items.reduce(
-                (bestIndex, item, itemIndex) => {
-                  const currentDistance = Math.abs(item.value - value);
+                (
+                  bestIndex,
+                  item,
+                  itemIndex,
+                ) => {
+                  const currentDistance =
+                    Math.abs(
+                      item.value - value,
+                    );
 
-                  const bestDistance = Math.abs(items[bestIndex].value - value);
+                  const bestDistance = Math.abs(
+                    items[bestIndex].value -
+                      value,
+                  );
 
-                  return currentDistance < bestDistance ? itemIndex : bestIndex;
+                  return currentDistance <
+                    bestDistance
+                    ? itemIndex
+                    : bestIndex;
                 },
                 0,
               );
 
               setPlaying(false);
+              clearInterval(
+                intervalRef.current,
+              );
 
               goToIndex(nearestIndex);
             }}
@@ -788,7 +1254,9 @@ export default function Simulation() {
           >
             <Space>
               <Button
-                icon={<StepBackwardOutlined />}
+                icon={
+                  <StepBackwardOutlined />
+                }
                 onClick={prev}
                 disabled={index === 0}
               />
@@ -797,22 +1265,36 @@ export default function Simulation() {
                 type="primary"
                 shape="circle"
                 icon={
-                  playing ? <PauseCircleOutlined /> : <PlayCircleOutlined />
+                  playing ? (
+                    <PauseCircleOutlined />
+                  ) : (
+                    <PlayCircleOutlined />
+                  )
                 }
                 onClick={togglePlay}
               />
 
               <Button
-                icon={<StepForwardOutlined />}
+                icon={
+                  <StepForwardOutlined />
+                }
                 onClick={next}
-                disabled={index === items.length - 1}
+                disabled={
+                  index === items.length - 1
+                }
               />
             </Space>
           </div>
 
           {/* SPEED */}
-          <div style={{ marginTop: 12 }}>
-            <span>Timing: {delay} ms</span>
+          <div
+            style={{
+              marginTop: 12,
+            }}
+          >
+            <span>
+              Timing: {delay} ms
+            </span>
 
             <Slider
               min={50}
@@ -821,7 +1303,8 @@ export default function Simulation() {
               value={delay}
               onChange={setDelay}
               tooltip={{
-                formatter: (value) => `${value} ms`,
+                formatter: (value) =>
+                  `${value} ms`,
               }}
             />
           </div>

@@ -82,7 +82,7 @@ function* getPlansSaga(action) {
       projectName,
     });
     const getFolderUrl = `/folders/by_path?path=${encodeURIComponent(action.payload.projectName)}&projectId=${action.payload.projectId}`;
-   
+
     const response = yield call(instance.get, getFolderUrl);
 
     const folders = response.data.filter((x) => x.name === "Sequence");
@@ -390,8 +390,9 @@ function* createSubPlanSaga(action) {
           sequenceObjects: [
             ...action.payload.sequenceObjects,
             {
-              folderId: newSubPlan.id,
-              objectIds: [],
+              planId: newSubPlan.planId,
+              subPlanId: newSubPlan.id,
+              objects: [],
             },
           ],
         }),
@@ -416,8 +417,9 @@ function* createSubPlanSaga(action) {
           sequenceObjects: [
             ...action.payload.sequenceObjects,
             {
-              folderId: newSubPlan.id,
-              objectIds: [],
+              planId: newSubPlan.planId,
+              subPlanId: newSubPlan.id,
+              objects: [],
             },
           ],
         }),
@@ -467,7 +469,7 @@ function* deleteSubPlanSaga(action) {
         (x) => x && x.id !== action.payload.subPlanId,
       );
       const newSequenceObjects = action.payload.sequenceObjects.filter(
-        (x) => x && x.folderId !== action.payload.subPlanId,
+        (x) => x && x.subPlanId !== action.payload.subPlanId,
       );
       //Get comment in the folder
       const getCommentUrl = `/comments?objectId=${action.payload.planId}&objectType=FOLDER`;
