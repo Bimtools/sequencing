@@ -36,183 +36,6 @@ const getRgbColor = (color) => {
   return `rgb(${color.r ?? 0}, ${color.g ?? 0}, ${color.b ?? 0})`;
 };
 
-const normalizeUnit = (unit) =>
-  String(unit || "")
-    .trim()
-    .toLowerCase();
-
-const roundByDecimals = (value, decimals = 2) => {
-  const number = Number(value);
-
-  if (!Number.isFinite(number)) {
-    return 0;
-  }
-
-  const safeDecimals = Number.isInteger(Number(decimals))
-    ? Math.max(0, Number(decimals))
-    : 2;
-
-  return Number(number.toFixed(safeDecimals));
-};
-
-/*
- * Giá trị LENGTH lấy từ property model được giả định là mm.
- */
-const convertLengthFromMm = (value, formatting) => {
-  const lengthMm = Number(value);
-
-  if (!Number.isFinite(lengthMm)) {
-    return 0;
-  }
-
-  const targetUnit = normalizeUnit(formatting?.lengthUnit || "mm");
-  const decimals = formatting?.lengthDecimals ?? 0;
-
-  let convertedValue = lengthMm;
-
-  switch (targetUnit) {
-    case "mm":
-      convertedValue = lengthMm;
-      break;
-
-    case "cm":
-      convertedValue = lengthMm / 10;
-      break;
-
-    case "m":
-      convertedValue = lengthMm / 1000;
-      break;
-
-    case "km":
-      convertedValue = lengthMm / 1_000_000;
-      break;
-
-    case "in":
-      convertedValue = lengthMm / 25.4;
-      break;
-
-    case "ft":
-      convertedValue = lengthMm / 304.8;
-      break;
-
-    case "yd":
-      convertedValue = lengthMm / 914.4;
-      break;
-
-    case "mi":
-      convertedValue = lengthMm / 1_609_344;
-      break;
-
-    /*
-     * US Survey units
-     */
-    case "sin":
-      convertedValue = lengthMm / (1200 / 39.37);
-      break;
-
-    case "sft":
-      convertedValue = lengthMm / (1200 / 3.937);
-      break;
-
-    case "syd":
-      convertedValue = lengthMm / ((1200 / 3.937) * 3);
-      break;
-
-    case "smi":
-      convertedValue = lengthMm / ((1200 / 3.937) * 5280);
-      break;
-
-    default:
-      convertedValue = lengthMm;
-      break;
-  }
-
-  return roundByDecimals(convertedValue, decimals);
-};
-
-/*
- * Giá trị WEIGHT lấy từ property model được giả định là kg.
- */
-const convertMassFromKg = (value, formatting) => {
-  const massKg = Number(value);
-
-  if (!Number.isFinite(massKg)) {
-    return 0;
-  }
-
-  const targetUnit = normalizeUnit(formatting?.massUnit || "kg");
-  const decimals = formatting?.massDecimals ?? 2;
-
-  let convertedValue = massKg;
-
-  switch (targetUnit) {
-    case "mg":
-      convertedValue = massKg * 1_000_000;
-      break;
-
-    case "g":
-      convertedValue = massKg * 1000;
-      break;
-
-    case "kg":
-      convertedValue = massKg;
-      break;
-
-    case "t":
-      convertedValue = massKg / 1000;
-      break;
-
-    case "oz":
-      convertedValue = massKg * 35.2739619496;
-      break;
-
-    case "lb":
-      convertedValue = massKg * 2.20462262185;
-      break;
-
-    /*
-     * Trimble imperial mass unit "ton" được xử lý là short ton.
-     */
-    case "ton":
-      convertedValue = massKg / 907.18474;
-      break;
-
-    default:
-      convertedValue = massKg;
-      break;
-  }
-
-  return roundByDecimals(convertedValue, decimals);
-};
-
-const getProjectFormatting = async (tcapi) => {
-  try {
-    const settings = await tcapi.project.getSettings();
-
-    const formatting = settings?.formatting || {};
-
-    return {
-      unitSystem: formatting.unitSystem || "metric",
-
-      lengthUnit: formatting.lengthUnit || "mm",
-      lengthDecimals: formatting.lengthDecimals ?? 0,
-
-      massUnit: formatting.massUnit || "kg",
-      massDecimals: formatting.massDecimals ?? 2,
-    };
-  } catch (error) {
-    console.error("Get project settings failed:", error);
-
-    return {
-      unitSystem: "metric",
-      lengthUnit: "mm",
-      lengthDecimals: 0,
-      massUnit: "kg",
-      massDecimals: 2,
-    };
-  }
-};
-
 const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
   const dispatch = useDispatch();
   const { message } = App.useApp();
@@ -295,8 +118,8 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
     try {
       const tcapi = await WorkspaceAPI.connect(window.parent);
 
-      const settings = await tcapi.project.getSettings();
-      const formatting = settings?.formatting || {};
+      // const settings = await tcapi.project.getSettings();
+      // const formatting = settings?.formatting || {};
 
       const selections = await tcapi.viewer.getSelection();
 
@@ -419,17 +242,6 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
                   .toUpperCase()
                   .trim();
 
-                // const isValidPropertyGroup =
-                //   propertyName.includes("ASSEMBLY") ||
-                //   propertyName.includes("PROPERTY") ||
-                //   propertyName.includes("PRODUCT") ||
-                //   propertyName.includes("COMMON") ||
-                //   propertyName.includes("QUANTITY");
-
-                // if (!isValidPropertyGroup) {
-                //   continue;
-                // }
-
                 for (const asmProperty of property.properties || []) {
                   if (isCompleted()) {
                     break;
@@ -465,7 +277,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
                     upperName.includes("WEIGHT") &&
                     value != null
                   ) {
-                    weight = convertMassFromKg(value, formatting);
+                    weight = Number(value);
                     continue;
                   }
 
@@ -479,33 +291,33 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
                     upperName.includes("LENGTH") &&
                     value != null
                   ) {
-                    asmLength = convertLengthFromMm(value, formatting);
+                    asmLength = Number(value).toFixed(0);
                   }
 
                   if (
                     cogX === null &&
                     (upperName.includes("GRAVITY X") ||
-                      upperName.includes("GRAVITYX"))
+                      upperName.includes("GRAVITYX") || upperName.includes("OX"))
                   ) {
-                    cogX = convertLengthFromMm(value, formatting);
+                    cogX = Number(value).toFixed(0);
                     continue;
                   }
 
                   if (
                     cogY === null &&
                     (upperName.includes("GRAVITY Y") ||
-                      upperName.includes("GRAVITYY"))
+                      upperName.includes("GRAVITYY") || upperName.includes("OY"))
                   ) {
-                    cogY = convertLengthFromMm(value, formatting);
+                    cogY = Number(value).toFixed(0);
                     continue;
                   }
 
                   if (
                     cogZ === null &&
                     (upperName.includes("GRAVITY Z") ||
-                      upperName.includes("GRAVITYZ"))
+                      upperName.includes("GRAVITYZ") || upperName.includes("OZ"))
                   ) {
-                    cogZ = convertLengthFromMm(value, formatting);
+                    cogZ = Number(value).toFixed(0);
                   }
                 }
 
@@ -530,10 +342,8 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
                 date: dayjs().format("DD-MM-YYYY"),
 
                 weight,
-                weightUnit: formatting.massUnit || "kg",
 
                 length: asmLength,
-                lengthUnit: formatting.lengthUnit || "mm",
 
                 name: asmName,
                 positionCode,
@@ -576,10 +386,8 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
             cog: object.cog,
 
             weight: object.weight,
-            weightUnit: object.weightUnit || formatting.massUnit || "kg",
 
             length: object.length,
-            lengthUnit: object.lengthUnit || formatting.lengthUnit || "mm",
 
             name: object.name,
 
@@ -625,8 +433,8 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
     try {
       const tcapi = await WorkspaceAPI.connect(window.parent);
 
-      const settings = await tcapi.project.getSettings();
-      const formatting = settings?.formatting || {};
+      // const settings = await tcapi.project.getSettings();
+      // const formatting = settings?.formatting || {};
 
       const selections = await tcapi.viewer.getSelection();
 
@@ -754,7 +562,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
               }
 
               if (!weight && upperName.includes("WEIGHT") && value != null) {
-                weight = convertMassFromKg(value, formatting);
+                weight = Number(value);
                 continue;
               }
 
@@ -764,7 +572,7 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
               }
 
               if (!asmLength && upperName.includes("LENGTH") && value != null) {
-                asmLength = convertLengthFromMm(value, formatting);
+                asmLength = Number(value).toFixed(0);
 
                 continue;
               }
@@ -772,27 +580,27 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
               if (
                 cogX === null &&
                 (upperName.includes("GRAVITY X") ||
-                  upperName.includes("GRAVITYX"))
+                  upperName.includes("GRAVITYX") || upperName.includes("OX"))
               ) {
-                cogX = convertLengthFromMm(value, formatting);
+                cogX = Number(value).toFixed(0);
                 continue;
               }
 
               if (
                 cogY === null &&
                 (upperName.includes("GRAVITY Y") ||
-                  upperName.includes("GRAVITYY"))
+                  upperName.includes("GRAVITYY") || upperName.includes("OY"))
               ) {
-                cogY = convertLengthFromMm(value, formatting);
+                cogY = Number(value).toFixed(0);
                 continue;
               }
 
               if (
                 cogZ === null &&
                 (upperName.includes("GRAVITY Z") ||
-                  upperName.includes("GRAVITYZ"))
+                  upperName.includes("GRAVITYZ") || upperName.includes("OZ"))
               ) {
-                cogZ = convertLengthFromMm(value, formatting);
+                cogZ = Number(value).toFixed(0);
               }
             }
 
@@ -819,13 +627,10 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
             date: dayjs().format("DD-MM-YYYY"),
 
             cog,
-            cogUnit: formatting.lengthUnit || "mm",
 
             weight,
-            weightUnit: formatting.massUnit || "kg",
 
             length: asmLength,
-            lengthUnit: formatting.lengthUnit || "mm",
 
             name: asmName,
             positionCode,
@@ -864,14 +669,10 @@ const SubPlanCollapse = ({ plan, activeSimulationItem }) => {
             ? object.cog
             : null,
 
-        cogUnit:
-          object.cogUnit || object.lengthUnit || formatting.lengthUnit || "mm",
 
         weight: object.weight,
-        weightUnit: object.weightUnit || formatting.massUnit || "kg",
 
         length: object.length,
-        lengthUnit: object.lengthUnit || formatting.lengthUnit || "mm",
 
         name: object.name,
 

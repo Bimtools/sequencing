@@ -49,22 +49,28 @@ import {
   SetActiveSimulationItem,
 } from "../store/sequence/action";
 
-const getObjectKey = (obj) => {
-  const runtimeId = obj.id || obj.runtimeId || obj.objectRuntimeId;
+/* =========================================================
+ * COMMON HELPERS
+ * ======================================================= */
 
-  return `${obj.modelId}-${runtimeId}`;
+const getObjectKey = (obj) => {
+  const runtimeId = obj?.id ?? obj?.runtimeId ?? obj?.objectRuntimeId;
+
+  return `${obj?.modelId}-${runtimeId}`;
 };
 
 const getObjectDate = (obj) => {
-  return obj.date || obj.assignedDate || "";
+  return obj?.date || obj?.assignedDate || "";
 };
 
 const isSameObject = (first, second) => {
-  if (!first || !second) return false;
+  if (!first || !second) {
+    return false;
+  }
 
-  const firstId = first.id || first.runtimeId || first.objectRuntimeId;
+  const firstId = first.id ?? first.runtimeId ?? first.objectRuntimeId;
 
-  const secondId = second.id || second.runtimeId || second.objectRuntimeId;
+  const secondId = second.id ?? second.runtimeId ?? second.objectRuntimeId;
 
   return (
     String(first.modelId) === String(second.modelId) &&
@@ -72,28 +78,349 @@ const isSameObject = (first, second) => {
   );
 };
 
+const normalizeUnit = (unit) =>
+  String(unit || "")
+    .trim()
+    .toLowerCase();
+
+const roundByDecimals = (value, decimals = 2) => {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+
+  const numericDecimals = Number(decimals);
+
+  const safeDecimals = Number.isInteger(numericDecimals)
+    ? Math.max(0, numericDecimals)
+    : 2;
+
+  const factor = 10 ** safeDecimals;
+
+  return Math.round((numericValue + Number.EPSILON) * factor) / factor;
+};
+
+/* =========================================================
+ * LENGTH CONVERSION
+ *
+ * Giá trị đầu vào được giả định là millimeter.
+ * ======================================================= */
+
+const gcd = (a, b) => {
+  let first = Math.abs(Number(a));
+  let second = Math.abs(Number(b));
+
+  while (second !== 0) {
+    const temporary = second;
+
+    second = first % second;
+    first = temporary;
+  }
+
+  return first || 1;
+};
+
+const formatFeetInchesFraction = (valueMm, denominator = 16) => {
+  const lengthMm = Number(valueMm);
+
+  if (!Number.isFinite(lengthMm)) {
+    return "";
+  }
+
+  const sign = lengthMm < 0 ? "-" : "";
+  const absoluteMm = Math.abs(lengthMm);
+
+  const totalInches = absoluteMm / 25.4;
+
+  let feet = Math.floor(totalInches / 12);
+  let remainingInches = totalInches - feet * 12;
+
+  let wholeInches = Math.floor(remainingInches);
+
+  let numerator = Math.round((remainingInches - wholeInches) * denominator);
+
+  if (numerator >= denominator) {
+    wholeInches += 1;
+    numerator = 0;
+  }
+
+  if (wholeInches >= 12) {
+    feet += Math.floor(wholeInches / 12);
+    wholeInches %= 12;
+  }
+
+  if (numerator === 0) {
+    return `${sign}${feet}'-${wholeInches}"`;
+  }
+
+  const divisor = gcd(numerator, denominator);
+
+  const reducedNumerator = numerator / divisor;
+  const reducedDenominator = denominator / divisor;
+
+  return `${sign}${feet}'-${wholeInches} ${reducedNumerator}/${reducedDenominator}"`;
+};
+
+const convertLengthFromMm = (value, formatting) => {
+  const lengthMm = Number(value);
+
+  if (!Number.isFinite(lengthMm)) {
+    return 0;
+  }
+
+  const targetUnit = normalizeUnit(formatting?.lengthUnit || "mm");
+
+  const decimals = formatting?.lengthDecimals ?? 0;
+
+  let convertedValue = lengthMm;
+
+  switch (targetUnit) {
+    case "mm":
+      convertedValue = lengthMm;
+      break;
+
+    case "cm":
+      convertedValue = lengthMm / 10;
+      break;
+
+    case "m":
+      convertedValue = lengthMm / 1000;
+      break;
+
+    case "km":
+      convertedValue = lengthMm / 1_000_000;
+      break;
+
+    case "in":
+      convertedValue = lengthMm / 25.4;
+      break;
+
+    case "ft":
+      convertedValue = lengthMm / 304.8;
+      break;
+
+    case "ft-in":
+      return formatFeetInchesFraction(lengthMm, 16);
+
+    case "yd":
+      convertedValue = lengthMm / 914.4;
+      break;
+
+    case "mi":
+      convertedValue = lengthMm / 1_609_344;
+      break;
+
+    /*
+     * US Survey units
+     */
+    case "sin":
+      convertedValue = lengthMm / (1200 / 39.37);
+      break;
+
+    case "sft":
+      convertedValue = lengthMm / (1200 / 3.937);
+      break;
+
+    case "syd":
+      convertedValue = lengthMm / ((1200 / 3.937) * 3);
+      break;
+
+    case "smi":
+      convertedValue = lengthMm / ((1200 / 3.937) * 5280);
+      break;
+
+    default:
+      convertedValue = lengthMm;
+      break;
+  }
+
+  return roundByDecimals(convertedValue, decimals);
+};
+
+/* =========================================================
+ * MASS CONVERSION
+ *
+ * Giá trị đầu vào được giả định là kilogram.
+ * ======================================================= */
+
+const convertMassFromKg = (value, formatting) => {
+  const massKg = Number(value);
+
+  if (!Number.isFinite(massKg)) {
+    return null;
+  }
+
+  const targetUnit = normalizeUnit(formatting?.massUnit || "kg");
+
+  const decimals = formatting?.massDecimals ?? 2;
+
+  let convertedValue = massKg;
+
+  switch (targetUnit) {
+    case "mg":
+      convertedValue = massKg * 1_000_000;
+      break;
+
+    case "g":
+      convertedValue = massKg * 1000;
+      break;
+
+    case "kg":
+      convertedValue = massKg;
+      break;
+
+    /*
+     * Metric tonne
+     */
+    case "t":
+    case "tonne":
+    case "metric-ton":
+    case "metricton":
+      convertedValue = massKg / 1000;
+      break;
+
+    case "oz":
+      convertedValue = massKg * 35.2739619496;
+      break;
+
+    case "lb":
+    case "lbs":
+      convertedValue = massKg * 2.20462262185;
+      break;
+
+    /*
+     * US short ton
+     */
+    case "ton":
+    case "short-ton":
+    case "shortton":
+      convertedValue = massKg / 907.18474;
+      break;
+
+    /*
+     * Imperial long ton
+     */
+    case "long-ton":
+    case "longton":
+      convertedValue = massKg / 1016.0469088;
+      break;
+
+    default:
+      convertedValue = massKg;
+      break;
+  }
+
+  return roundByDecimals(convertedValue, decimals);
+};
+
+const getDisplayMassUnit = (formatting) => {
+  const massUnit = normalizeUnit(formatting?.massUnit || "kg");
+
+  switch (massUnit) {
+    case "lbs":
+      return "lb";
+
+    case "tonne":
+    case "metric-ton":
+    case "metricton":
+      return "t";
+
+    case "short-ton":
+    case "shortton":
+      return "ton";
+
+    case "longton":
+      return "long-ton";
+
+    default:
+      return massUnit || "kg";
+  }
+};
+
+/* =========================================================
+ * PROJECT FORMATTING
+ * ======================================================= */
+
+const DEFAULT_PROJECT_FORMATTING = {
+  unitSystem: "metric",
+
+  lengthUnit: "mm",
+  lengthDecimals: 0,
+
+  massUnit: "kg",
+  massDecimals: 2,
+};
+
+const getProjectFormatting = async (tcapi) => {
+  try {
+    const settings = await tcapi.project.getSettings();
+
+    const formatting = settings?.formatting || {};
+
+    const result = {
+      unitSystem:
+        formatting.unitSystem || DEFAULT_PROJECT_FORMATTING.unitSystem,
+
+      lengthUnit:
+        formatting.lengthUnit || DEFAULT_PROJECT_FORMATTING.lengthUnit,
+
+      lengthDecimals:
+        formatting.lengthDecimals ?? DEFAULT_PROJECT_FORMATTING.lengthDecimals,
+
+      massUnit: formatting.massUnit || DEFAULT_PROJECT_FORMATTING.massUnit,
+
+      massDecimals:
+        formatting.massDecimals ?? DEFAULT_PROJECT_FORMATTING.massDecimals,
+    };
+
+    console.log("Project formatting:", result);
+
+    return result;
+  } catch (error) {
+    console.error("Get project settings failed:", error);
+
+    return DEFAULT_PROJECT_FORMATTING;
+  }
+};
+
+/* =========================================================
+ * SORTABLE ITEM
+ * ======================================================= */
+
 const SortableSubItem = React.memo(
   ({
     item,
     displayIndex,
     icon,
+
     selectedIds,
     setSelectedIds,
+
     lastSelected,
     setLastSelected,
+
     setFocusedIndex,
     currentObjects,
+
     onAssignDate,
     onDelete,
+    onDeleteMulti,
+
     selectObjectsInViewer,
     setActiveItem,
     listRef,
+
     onAddCamera,
     onChangeCamera,
     onDeleteCamera,
+
+    projectFormatting,
   }) => {
     const { message } = App.useApp();
+
     const [assignDate, setAssignDate] = useState(null);
+
     const [dateStep, setDateStep] = useState(0);
 
     const sortableId = getObjectKey(item);
@@ -109,13 +436,47 @@ const SortableSubItem = React.memo(
 
     const style = {
       transform: CSS.Transform.toString(transform),
+
       transition,
       cursor: "pointer",
+
       background: isSelected ? "#e6f4ff" : undefined,
+
       paddingLeft: 10,
       paddingRight: 2,
+
       border: isSelected ? "1px solid #91caff" : undefined,
     };
+
+    const displayWeight = useMemo(() => {
+      if (item?.weight == null || !Number.isFinite(Number(item.weight))) {
+        return null;
+      }
+
+      /*
+       * item.weight phải lưu theo kg.
+       * Chỉ convert khi hiển thị.
+       */
+      return convertMassFromKg(item.weight, projectFormatting);
+    }, [item?.weight, projectFormatting]);
+
+    const displayWeightUnit = useMemo(
+      () => getDisplayMassUnit(projectFormatting),
+      [projectFormatting],
+    );
+
+    const displayLength = useMemo(() => {
+      if (item?.length == null || !Number.isFinite(Number(item.length))) {
+        return null;
+      }
+
+      return convertLengthFromMm(item.length, projectFormatting);
+    }, [item?.length, projectFormatting]);
+
+    const displayLengthUnit = useMemo(
+      () => normalizeUnit(projectFormatting?.lengthUnit || "mm"),
+      [projectFormatting],
+    );
 
     const handleClick = async (event) => {
       event.stopPropagation();
@@ -150,6 +511,7 @@ const SortableSubItem = React.memo(
           ];
 
           setSelectedIds(nextSelection);
+
           setLastSelected(item);
         }
       } else if (isCtrlSelect) {
@@ -162,11 +524,13 @@ const SortableSubItem = React.memo(
           : [...selectedIds, item];
 
         setSelectedIds(nextSelection);
+
         setLastSelected(item);
       } else {
         nextSelection = [item];
 
         setSelectedIds(nextSelection);
+
         setLastSelected(item);
         setActiveItem(item);
       }
@@ -186,27 +550,34 @@ const SortableSubItem = React.memo(
       event.stopPropagation();
       onDelete(item);
     };
-    const handleGoToCamera = useCallback(async (item) => {
-      if (!item?.camera) {
-        message.warning("This item does not have a saved camera.");
-        return;
-      }
 
-      try {
-        const tcapi = await WorkspaceAPI.connect(window.parent);
+    const handleGoToCamera = useCallback(
+      async (selectedItem) => {
+        if (!selectedItem?.camera) {
+          message.warning("This item does not have a saved camera.");
 
-        await tcapi.viewer.setCamera(item.camera, {
-          animationTime: 1000,
-        });
-      } catch (error) {
-        console.error("Go to camera failed:", error);
-        message.error("Unable to restore the saved camera.");
-      }
-    }, []);
+          return;
+        }
+
+        try {
+          const tcapi = await WorkspaceAPI.connect(window.parent);
+
+          await tcapi.viewer.setCamera(selectedItem.camera, {
+            animationTime: 1000,
+          });
+        } catch (error) {
+          console.error("Go to camera failed:", error);
+
+          message.error("Unable to restore the saved camera.");
+        }
+      },
+      [message],
+    );
 
     const contextMenuItems = [
       {
         key: "assignDate",
+
         label: (
           <div
             style={{
@@ -227,7 +598,9 @@ const SortableSubItem = React.memo(
             <Input
               size="small"
               type="number"
-              style={{ width: 50 }}
+              style={{
+                width: 50,
+              }}
               value={dateStep}
               onChange={(event) => setDateStep(event.target.value)}
             />
@@ -246,53 +619,57 @@ const SortableSubItem = React.memo(
           </div>
         ),
       },
+
       {
         type: "divider",
       },
+
       {
         key: "addView",
         icon: <CameraOutlined />,
         label: "Add Camera",
+
         onClick: ({ domEvent }) => {
           domEvent.stopPropagation();
           onAddCamera(item);
         },
       },
+
       {
         key: "updateView",
         icon: <CameraOutlined />,
         label: "Change Camera",
+
         onClick: ({ domEvent }) => {
           domEvent.stopPropagation();
           onChangeCamera(item);
         },
       },
+
       {
         key: "deleteView",
         danger: true,
         icon: <EyeInvisibleOutlined />,
         label: "Delete Camera",
+
         onClick: ({ domEvent }) => {
           domEvent.stopPropagation();
           onDeleteCamera(item);
         },
       },
+
       {
         key: "delete",
         danger: true,
         icon: <DeleteOutlined />,
         label: "Delete",
+
         onClick: ({ domEvent }) => {
           domEvent.stopPropagation();
-          onDelete(item);
+          onDeleteMulti();
         },
       },
     ];
-
-    const displayWeight =
-      item.weight != null && Number.isFinite(Number(item.weight))
-        ? Math.round((Number(item.weight) + Number.EPSILON) * 100) / 100
-        : null;
 
     const displayDate = getObjectDate(item);
 
@@ -346,17 +723,35 @@ const SortableSubItem = React.memo(
                   minWidth: 24,
                 }}
               >
-                {`${displayIndex}: `}
+                {`${displayIndex}: `}
               </span>
 
               {item.asmPos || item.id}
 
               {item.positionCode ? ` [${item.positionCode}]` : ""}
 
-              {displayWeight != null ? ` (${displayWeight} ${item.weightUnit})` : ""}
+              {displayWeight != null
+                ? ` (${displayWeight} ${displayWeightUnit})`
+                : ""}
+
+              {/*
+               *
+               * {displayLength != null
+               *   ? ` [${displayLength} ${
+               *       displayLengthUnit ===
+               *       "ft-in"
+               *         ? ""
+               *         : displayLengthUnit
+               *     }]`
+               *   : ""}
+               */}
             </strong>
 
-            <div style={{ flex: 1 }} />
+            <div
+              style={{
+                flex: 1,
+              }}
+            />
 
             {displayDate && (
               <span
@@ -368,11 +763,13 @@ const SortableSubItem = React.memo(
                 {displayDate}
               </span>
             )}
+
             {item.camera && (
               <Tooltip title="Go to saved camera">
                 <CameraOutlined
-                  onClick={(e) => {
-                    e.stopPropagation();
+                  onClick={(event) => {
+                    event.stopPropagation();
+
                     handleGoToCamera(item);
                   }}
                   style={{
@@ -383,6 +780,7 @@ const SortableSubItem = React.memo(
                 />
               </Tooltip>
             )}
+
             <Button
               type="text"
               icon={<CloseOutlined />}
@@ -394,6 +792,10 @@ const SortableSubItem = React.memo(
     );
   },
 );
+
+/* =========================================================
+ * MAIN COMPONENT
+ * ======================================================= */
 
 const SequenceObjectCollapse = ({
   subPlan,
@@ -414,19 +816,45 @@ const SequenceObjectCollapse = ({
 
   const [focusedIndex, setFocusedIndex] = useState(0);
 
+  const [projectFormatting, setProjectFormatting] = useState(
+    DEFAULT_PROJECT_FORMATTING,
+  );
+
   const tcapiRef = useRef(null);
   const listRef = useRef(null);
 
+  /* =======================================================
+   * CONNECT TRIMBLE API AND GET PROJECT SETTINGS
+   * ===================================================== */
+
   useEffect(() => {
+    let mounted = true;
+
     const connectApi = async () => {
       try {
-        tcapiRef.current = await WorkspaceAPI.connect(window.parent);
+        const tcapi = await WorkspaceAPI.connect(window.parent);
+
+        tcapiRef.current = tcapi;
+
+        const formatting = await getProjectFormatting(tcapi);
+
+        if (mounted) {
+          setProjectFormatting(formatting);
+        }
       } catch (error) {
-        console.error(error);
+        console.error("Connect Trimble API failed:", error);
+
+        if (mounted) {
+          setProjectFormatting(DEFAULT_PROJECT_FORMATTING);
+        }
       }
     };
 
     connectApi();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const sensors = useSensors(
@@ -449,16 +877,20 @@ const SequenceObjectCollapse = ({
     const result = [];
 
     sequenceObjects.forEach((group) => {
-      const objects = group.objects || [];
+      const objects = group?.objects || [];
 
       objects.forEach((obj) => {
-        const runtimeId = obj.id || obj.runtimeId || obj.objectRuntimeId;
+        const runtimeId = obj.id ?? obj.runtimeId ?? obj.objectRuntimeId;
 
         result.push({
           ...obj,
+
           planId: group.planId || group.id,
+
           subPlanId: group.subPlanId,
+
           modelId: obj.modelId,
+
           id: runtimeId,
         });
       });
@@ -472,6 +904,7 @@ const SequenceObjectCollapse = ({
       dispatch(
         SetObjectsRequest({
           subPlanId: subPlan.id,
+
           objects,
         }),
       );
@@ -501,6 +934,7 @@ const SequenceObjectCollapse = ({
         if (!modelGroups.has(modelKey)) {
           modelGroups.set(modelKey, {
             modelId: item.modelId,
+
             objectRuntimeIds: [],
           });
         }
@@ -511,6 +945,7 @@ const SequenceObjectCollapse = ({
       const modelObjectIds = [...modelGroups.values()]
         .map((group) => ({
           ...group,
+
           objectRuntimeIds: [...new Set(group.objectRuntimeIds)],
         }))
         .filter((group) => group.objectRuntimeIds.length > 0);
@@ -523,12 +958,10 @@ const SequenceObjectCollapse = ({
         modelObjectIds,
       };
 
-      console.log(modelObjectIds);
+      console.log("Selected model objects:", modelObjectIds);
 
-      // Select objects
       await tcapi.viewer.setSelection(selector, "set");
 
-      // Zoom and fit selected objects
       await tcapi.viewer.setCamera(selector, {
         animationTime: 800,
       });
@@ -539,7 +972,9 @@ const SequenceObjectCollapse = ({
 
   const changeIndex = useCallback(
     async (newIndex) => {
-      if (!items.length) return;
+      if (!items.length) {
+        return;
+      }
 
       const safeIndex = Math.max(0, Math.min(newIndex, items.length - 1));
 
@@ -548,8 +983,11 @@ const SequenceObjectCollapse = ({
       dispatch(
         SetActiveSimulationItem({
           planId: item.planId,
+
           subPlanId: item.subPlanId,
+
           modelId: item.modelId,
+
           id: item.id,
         }),
       );
@@ -571,7 +1009,9 @@ const SequenceObjectCollapse = ({
 
     const currentItem = selectedIds[0] || currentObjects[focusedIndex];
 
-    if (!currentItem) return -1;
+    if (!currentItem) {
+      return -1;
+    }
 
     return items.findIndex(
       (item) =>
@@ -612,13 +1052,16 @@ const SequenceObjectCollapse = ({
 
   const setActiveItem = useCallback(
     (item) => {
-      const runtimeId = item.id || item.runtimeId || item.objectRuntimeId;
+      const runtimeId = item.id ?? item.runtimeId ?? item.objectRuntimeId;
 
       dispatch(
         SetActiveSimulationItem({
           planId: item.planId,
+
           subPlanId: item.subPlanId || subPlan.id,
+
           modelId: item.modelId,
+
           id: runtimeId,
         }),
       );
@@ -638,11 +1081,13 @@ const SequenceObjectCollapse = ({
     const index = currentObjects.findIndex(
       (item) =>
         String(item.modelId) === String(activeSimulationItem.modelId) &&
-        String(item.id || item.runtimeId || item.objectRuntimeId) ===
+        String(item.id ?? item.runtimeId ?? item.objectRuntimeId) ===
           String(activeSimulationItem.id),
     );
 
-    if (index === -1) return;
+    if (index === -1) {
+      return;
+    }
 
     const item = currentObjects[index];
 
@@ -707,6 +1152,7 @@ const SequenceObjectCollapse = ({
       const reordered = arrayMove(currentObjects, oldIndex, newIndex);
 
       updateObjects(reordered);
+
       setFocusedIndex(newIndex);
     },
     [currentObjects, updateObjects],
@@ -714,7 +1160,9 @@ const SequenceObjectCollapse = ({
 
   const handleAssignDate = useCallback(
     (date, dateStep) => {
-      if (!date) return;
+      if (!date) {
+        return;
+      }
 
       const step = Number(dateStep) || 0;
 
@@ -761,7 +1209,9 @@ const SequenceObjectCollapse = ({
       );
 
       setFocusedIndex((previous) => {
-        if (!updated.length) return -1;
+        if (!updated.length) {
+          return -1;
+        }
 
         return Math.max(0, Math.min(previous, updated.length - 1));
       });
@@ -769,31 +1219,55 @@ const SequenceObjectCollapse = ({
     [currentObjects, updateObjects],
   );
 
+  const handleDeleteMulti = useCallback(() => {
+    if (!selectedIds.length) {
+      return;
+    }
+
+    const selectedKeys = new Set(selectedIds.map((obj) => getObjectKey(obj)));
+
+    const updated = currentObjects.filter(
+      (obj) => !selectedKeys.has(getObjectKey(obj)),
+    );
+
+    updateObjects(updated);
+
+    setSelectedIds([]);
+    setLastSelected(null);
+
+    setFocusedIndex((previous) => {
+      if (!updated.length) {
+        return -1;
+      }
+
+      return Math.max(0, Math.min(previous, updated.length - 1));
+    });
+  }, [currentObjects, selectedIds, updateObjects]);
+
   const handleAddCamera = useCallback(
     async (item) => {
       try {
-        const tcapi = await WorkspaceAPI.connect(window.parent);
+        const tcapi =
+          tcapiRef.current || (await WorkspaceAPI.connect(window.parent));
+
         const camera = await tcapi.viewer.getCamera();
 
-        if (!camera) return;
+        if (!camera) {
+          return;
+        }
 
         const newObjects = currentObjects.map((obj) => {
-          const objId = obj.id ?? obj.runtimeId ?? obj.objectRuntimeId;
-          const itemId = item.id ?? item.runtimeId ?? item.objectRuntimeId;
+          if (!isSameObject(obj, item)) {
+            return obj;
+          }
 
-          const isSameObject =
-            String(obj.modelId) === String(item.modelId) &&
-            String(objId) === String(itemId);
-
-          return isSameObject
-            ? {
-                ...obj,
-                camera,
-              }
-            : obj;
+          return {
+            ...obj,
+            camera,
+          };
         });
 
-        await updateObjects(newObjects);
+        updateObjects(newObjects);
       } catch (error) {
         console.error("Save camera failed:", error);
       }
@@ -802,7 +1276,7 @@ const SequenceObjectCollapse = ({
   );
 
   const updateObjectCamera = useCallback(
-    async (item, camera) => {
+    (item, camera) => {
       const newObjects = currentObjects.map((obj) =>
         isSameObject(obj, item)
           ? {
@@ -812,7 +1286,7 @@ const SequenceObjectCollapse = ({
           : obj,
       );
 
-      await updateObjects(newObjects);
+      updateObjects(newObjects);
     },
     [currentObjects, updateObjects],
   );
@@ -820,23 +1294,27 @@ const SequenceObjectCollapse = ({
   const handleChangeCamera = useCallback(
     async (item) => {
       try {
-        const tcapi = await WorkspaceAPI.connect(window.parent);
+        const tcapi =
+          tcapiRef.current || (await WorkspaceAPI.connect(window.parent));
+
         const camera = await tcapi.viewer.getCamera();
 
-        if (!camera) return;
+        if (!camera) {
+          return;
+        }
 
-        await updateObjectCamera(item, camera);
+        updateObjectCamera(item, camera);
       } catch (error) {
-        console.error("Save camera failed:", error);
+        console.error("Change camera failed:", error);
       }
     },
     [updateObjectCamera],
   );
 
   const handleDeleteCamera = useCallback(
-    async (item) => {
+    (item) => {
       try {
-        await updateObjectCamera(item, null);
+        updateObjectCamera(item, null);
       } catch (error) {
         console.error("Delete camera failed:", error);
       }
@@ -892,7 +1370,7 @@ const SequenceObjectCollapse = ({
               <SortableSubItem
                 key={getObjectKey(item)}
                 item={item}
-                displayIndex={displayIndexMap.get(getObjectKey(item)) || 1}
+                displayIndex={displayIndexMap?.get(getObjectKey(item)) || 1}
                 selectedIds={selectedIds}
                 setSelectedIds={setSelectedIds}
                 lastSelected={lastSelected}
@@ -902,12 +1380,14 @@ const SequenceObjectCollapse = ({
                 icon={<FileOutlined />}
                 onAssignDate={handleAssignDate}
                 onDelete={handleDelete}
+                onDeleteMulti={handleDeleteMulti}
                 onAddCamera={handleAddCamera}
                 onChangeCamera={handleChangeCamera}
                 onDeleteCamera={handleDeleteCamera}
                 selectObjectsInViewer={selectObjectsInViewer}
                 setActiveItem={setActiveItem}
                 listRef={listRef}
+                projectFormatting={projectFormatting}
               />
             )}
           />

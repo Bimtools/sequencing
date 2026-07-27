@@ -43,52 +43,595 @@ const DATE_FORMATS = [
   "YYYY/MM/DD",
 ];
 
-const TopMenu = ({ projectName: projectNameProp = "" }) => {
+const DEFAULT_FORMATTING = {
+  unitSystem: "metric",
+
+  lengthUnit: "mm",
+  lengthDecimals: 0,
+
+  massUnit: "kg",
+  massDecimals: 2,
+};
+
+/* =========================================================
+ * UNIT HELPERS
+ * ======================================================= */
+
+const normalizeUnit = (unit) =>
+  String(unit || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+
+const roundByDecimals = (value, decimals = 2) => {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+
+  const numericDecimals = Number(decimals);
+
+  const safeDecimals = Number.isInteger(numericDecimals)
+    ? Math.max(0, numericDecimals)
+    : 2;
+
+  const factor = 10 ** safeDecimals;
+
+  return (
+    Math.round(
+      (numericValue + Number.EPSILON) * factor,
+    ) / factor
+  );
+};
+
+const greatestCommonDivisor = (a, b) => {
+  let first = Math.abs(Number(a));
+  let second = Math.abs(Number(b));
+
+  while (second !== 0) {
+    const temporary = second;
+
+    second = first % second;
+    first = temporary;
+  }
+
+  return first || 1;
+};
+
+/* =========================================================
+ * FEET-INCH FRACTION FORMAT
+ *
+ * Example:
+ * 698.5 mm -> 2'-3 1/2"
+ * ======================================================= */
+
+const getFeetInchesDenominator = (formatting) => {
+  const configured =
+    Number(
+      formatting?.lengthFractionDenominator ??
+        formatting?.fractionDenominator,
+    );
+
+  if (
+    [2, 4, 8, 16, 32, 64].includes(configured)
+  ) {
+    return configured;
+  }
+
+  return 16;
+};
+
+const formatFeetInchesFraction = (
+  valueMm,
+  denominator = 16,
+) => {
+  const lengthMm = Number(valueMm);
+
+  if (!Number.isFinite(lengthMm)) {
+    return "";
+  }
+
+  const sign = lengthMm < 0 ? "-" : "";
+  const absoluteMm = Math.abs(lengthMm);
+
+  const totalInches = absoluteMm / 25.4;
+
+  let feet = Math.floor(totalInches / 12);
+
+  const remainingInches =
+    totalInches - feet * 12;
+
+  let wholeInches =
+    Math.floor(remainingInches);
+
+  let numerator = Math.round(
+    (remainingInches - wholeInches) *
+      denominator,
+  );
+
+  if (numerator >= denominator) {
+    wholeInches += 1;
+    numerator = 0;
+  }
+
+  if (wholeInches >= 12) {
+    feet += Math.floor(
+      wholeInches / 12,
+    );
+
+    wholeInches =
+      wholeInches % 12;
+  }
+
+  if (numerator === 0) {
+    return `${sign}${feet}'-${wholeInches}"`;
+  }
+
+  const divisor =
+    greatestCommonDivisor(
+      numerator,
+      denominator,
+    );
+
+  const reducedNumerator =
+    numerator / divisor;
+
+  const reducedDenominator =
+    denominator / divisor;
+
+  return `${sign}${feet}'-${wholeInches} ${reducedNumerator}/${reducedDenominator}"`;
+};
+
+/* =========================================================
+ * LENGTH CONVERSION
+ *
+ * Input is assumed to be millimeter.
+ * ======================================================= */
+
+const convertLengthFromMm = (
+  value,
+  formatting = DEFAULT_FORMATTING,
+) => {
+  const lengthMm = Number(value);
+
+  if (!Number.isFinite(lengthMm)) {
+    return "";
+  }
+
+  const targetUnit = normalizeUnit(
+    formatting?.lengthUnit || "mm",
+  );
+
+  const decimals =
+    formatting?.lengthDecimals ?? 0;
+
+  let convertedValue = lengthMm;
+
+  switch (targetUnit) {
+    case "mm":
+      convertedValue = lengthMm;
+      break;
+
+    case "cm":
+      convertedValue = lengthMm / 10;
+      break;
+
+    case "m":
+      convertedValue = lengthMm / 1000;
+      break;
+
+    case "km":
+      convertedValue =
+        lengthMm / 1_000_000;
+      break;
+
+    case "in":
+    case "inch":
+    case "inches":
+      convertedValue = lengthMm / 25.4;
+      break;
+
+    case "ft":
+    case "foot":
+    case "feet":
+      convertedValue = lengthMm / 304.8;
+      break;
+
+    case "ft-in":
+    case "ftin":
+    case "feet-inches":
+    case "feet-inch":
+    case "foot-inch":
+      return formatFeetInchesFraction(
+        lengthMm,
+        getFeetInchesDenominator(
+          formatting,
+        ),
+      );
+
+    case "yd":
+    case "yard":
+    case "yards":
+      convertedValue = lengthMm / 914.4;
+      break;
+
+    case "mi":
+    case "mile":
+    case "miles":
+      convertedValue =
+        lengthMm / 1_609_344;
+      break;
+
+    /*
+     * US Survey units
+     */
+    case "sin":
+      convertedValue =
+        lengthMm / (1200 / 39.37);
+      break;
+
+    case "sft":
+      convertedValue =
+        lengthMm / (1200 / 3.937);
+      break;
+
+    case "syd":
+      convertedValue =
+        lengthMm /
+        ((1200 / 3.937) * 3);
+      break;
+
+    case "smi":
+      convertedValue =
+        lengthMm /
+        ((1200 / 3.937) * 5280);
+      break;
+
+    default:
+      convertedValue = lengthMm;
+      break;
+  }
+
+  return roundByDecimals(
+    convertedValue,
+    decimals,
+  );
+};
+
+/* =========================================================
+ * MASS CONVERSION
+ *
+ * Input is assumed to be kilogram.
+ * ======================================================= */
+
+const convertMassFromKg = (
+  value,
+  formatting = DEFAULT_FORMATTING,
+) => {
+  const massKg = Number(value);
+
+  if (!Number.isFinite(massKg)) {
+    return "";
+  }
+
+  const targetUnit = normalizeUnit(
+    formatting?.massUnit || "kg",
+  );
+
+  const decimals =
+    formatting?.massDecimals ?? 2;
+
+  let convertedValue = massKg;
+
+  switch (targetUnit) {
+    case "mg":
+      convertedValue =
+        massKg * 1_000_000;
+      break;
+
+    case "g":
+    case "gram":
+    case "grams":
+      convertedValue =
+        massKg * 1000;
+      break;
+
+    case "kg":
+    case "kilogram":
+    case "kilograms":
+      convertedValue = massKg;
+      break;
+
+    /*
+     * Metric tonne
+     */
+    case "t":
+    case "tonne":
+    case "tonnes":
+    case "metric-ton":
+    case "metricton":
+      convertedValue =
+        massKg / 1000;
+      break;
+
+    case "oz":
+    case "ounce":
+    case "ounces":
+      convertedValue =
+        massKg * 35.2739619496;
+      break;
+
+    case "lb":
+    case "lbs":
+    case "pound":
+    case "pounds":
+      convertedValue =
+        massKg * 2.20462262185;
+      break;
+
+    /*
+     * US short ton
+     */
+    case "ton":
+    case "short-ton":
+    case "shortton":
+      convertedValue =
+        massKg / 907.18474;
+      break;
+
+    /*
+     * Imperial long ton
+     */
+    case "long-ton":
+    case "longton":
+      convertedValue =
+        massKg / 1016.0469088;
+      break;
+
+    default:
+      convertedValue = massKg;
+      break;
+  }
+
+  return roundByDecimals(
+    convertedValue,
+    decimals,
+  );
+};
+
+const getDisplayLengthUnit = (
+  formatting = DEFAULT_FORMATTING,
+) => {
+  const unit = normalizeUnit(
+    formatting?.lengthUnit || "mm",
+  );
+
+  switch (unit) {
+    case "inch":
+    case "inches":
+      return "in";
+
+    case "foot":
+    case "feet":
+      return "ft";
+
+    case "feet-inches":
+    case "feet-inch":
+    case "foot-inch":
+    case "ftin":
+      return "ft-in";
+
+    case "yard":
+    case "yards":
+      return "yd";
+
+    case "mile":
+    case "miles":
+      return "mi";
+
+    default:
+      return unit || "mm";
+  }
+};
+
+const getDisplayMassUnit = (
+  formatting = DEFAULT_FORMATTING,
+) => {
+  const unit = normalizeUnit(
+    formatting?.massUnit || "kg",
+  );
+
+  switch (unit) {
+    case "gram":
+    case "grams":
+      return "g";
+
+    case "kilogram":
+    case "kilograms":
+      return "kg";
+
+    case "lbs":
+    case "pound":
+    case "pounds":
+      return "lb";
+
+    case "ounce":
+    case "ounces":
+      return "oz";
+
+    case "tonne":
+    case "tonnes":
+    case "metric-ton":
+    case "metricton":
+      return "t";
+
+    case "short-ton":
+    case "shortton":
+      return "ton";
+
+    case "longton":
+      return "long-ton";
+
+    default:
+      return unit || "kg";
+  }
+};
+
+const normalizeProjectFormatting = (
+  formatting = {},
+) => {
+  return {
+    unitSystem:
+      formatting?.unitSystem ||
+      DEFAULT_FORMATTING.unitSystem,
+
+    lengthUnit:
+      formatting?.lengthUnit ||
+      DEFAULT_FORMATTING.lengthUnit,
+
+    lengthDecimals:
+      formatting?.lengthDecimals ??
+      DEFAULT_FORMATTING.lengthDecimals,
+
+    lengthFractionDenominator:
+      formatting?.lengthFractionDenominator ??
+      formatting?.fractionDenominator ??
+      16,
+
+    massUnit:
+      formatting?.massUnit ||
+      DEFAULT_FORMATTING.massUnit,
+
+    massDecimals:
+      formatting?.massDecimals ??
+      DEFAULT_FORMATTING.massDecimals,
+  };
+};
+
+/* =========================================================
+ * COG CONVERSION
+ *
+ * Input cog is assumed to be:
+ * [x, y, z] in millimeter.
+ * ======================================================= */
+
+const formatCog = (
+  cog,
+  formatting = DEFAULT_FORMATTING,
+) => {
+  if (
+    !Array.isArray(cog) ||
+    cog.length < 3
+  ) {
+    return "";
+  }
+
+  const convertedValues = cog
+    .slice(0, 3)
+    .map((value) =>
+      convertLengthFromMm(
+        value,
+        formatting,
+      ),
+    );
+
+  if (
+    convertedValues.some(
+      (value) =>
+        value === "" ||
+        value == null,
+    )
+  ) {
+    return "";
+  }
+
+  const lengthUnit =
+    getDisplayLengthUnit(
+      formatting,
+    );
+
+  /*
+   * ft-in values already contain:
+   * ' and "
+   */
+  const unitText =
+    lengthUnit === "ft-in"
+      ? ""
+      : ` ${lengthUnit}`;
+
+  return `(${convertedValues[0]}, ${convertedValues[1]}, ${convertedValues[2]})${unitText}`;
+};
+
+/* =========================================================
+ * TOP MENU
+ * ======================================================= */
+
+const TopMenu = ({
+  projectName: projectNameProp = "",
+}) => {
   const dispatch = useDispatch();
 
   const [form] = Form.useForm();
   const [exportForm] = Form.useForm();
 
   const plans = useSelector(
-    (state) => state.sequence.plans || [],
+    (state) =>
+      state.sequence.plans || [],
   );
 
   const rootFolderId = useSelector(
-    (state) => state.sequence.rootFolderId,
+    (state) =>
+      state.sequence.rootFolderId,
   );
 
   const rootCommentId = useSelector(
-    (state) => state.sequence.rootCommentId,
+    (state) =>
+      state.sequence.rootCommentId,
   );
 
-  const sequenceObjects = useSelector(
-    (state) => state.sequence.sequenceObjects || [],
-  );
+  const sequenceObjects =
+    useSelector(
+      (state) =>
+        state.sequence
+          .sequenceObjects || [],
+    );
 
-  const projectNameFromRedux = useSelector(
-    (state) => state.sequence.projectName || "",
-  );
+  const projectNameFromRedux =
+    useSelector(
+      (state) =>
+        state.sequence.projectName ||
+        "",
+    );
 
   const projectName =
-    projectNameProp || projectNameFromRedux || "";
+    projectNameProp ||
+    projectNameFromRedux ||
+    "";
 
-  const [isModalOpen, setIsModalOpen] =
-    useState(false);
+  const [
+    isModalOpen,
+    setIsModalOpen,
+  ] = useState(false);
 
-  const [exportModalOpen, setExportModalOpen] =
-    useState(false);
+  const [
+    exportModalOpen,
+    setExportModalOpen,
+  ] = useState(false);
 
-  const [exporting, setExporting] =
-    useState(false);
+  const [
+    exporting,
+    setExporting,
+  ] = useState(false);
 
   const planName = Form.useWatch(
     "planName",
     form,
   );
 
-  // =====================================================
-  // CREATE PLAN
-  // =====================================================
+  /* =======================================================
+   * CREATE PLAN
+   * ===================================================== */
 
   const handleCreate = async () => {
     try {
@@ -97,7 +640,9 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
 
       dispatch(
         CreatePlanRequest({
-          name: values.planName.trim(),
+          name:
+            values.planName.trim(),
+
           rootCommentId,
           rootFolderId,
           plans,
@@ -121,9 +666,9 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
     setIsModalOpen(false);
   };
 
-  // =====================================================
-  // HIGHLIGHT SELECTED OBJECT
-  // =====================================================
+  /* =======================================================
+   * HIGHLIGHT SELECTED OBJECT
+   * ===================================================== */
 
   const handleHighlight = async () => {
     try {
@@ -150,7 +695,10 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
         selections[0]
           ?.objectRuntimeIds?.[0];
 
-      if (!modelId || runtimeId == null) {
+      if (
+        !modelId ||
+        runtimeId == null
+      ) {
         message.warning(
           "The selected object is invalid.",
         );
@@ -160,19 +708,21 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
 
       let found = null;
 
-      for (const group of sequenceObjects) {
+      for (
+        const group of sequenceObjects
+      ) {
         const objects =
           group?.objects || [];
 
         const obj = objects.find(
           (item) => {
             const objRuntimeId =
-              item.id ||
-              item.runtimeId ||
+              item.id ??
+              item.runtimeId ??
               item.objectRuntimeId;
 
             const objModelId =
-              item.modelId ||
+              item.modelId ??
               group.modelId;
 
             return (
@@ -187,12 +737,12 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
         if (obj) {
           found = {
             planId:
-              group.planId ||
-              group.id ||
+              group.planId ??
+              group.id ??
               obj.planId,
 
             subPlanId:
-              group.subPlanId ||
+              group.subPlanId ??
               obj.subPlanId,
 
             modelId,
@@ -244,9 +794,9 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
     }
   };
 
-  // =====================================================
-  // EXCEL HELPERS
-  // =====================================================
+  /* =======================================================
+   * EXCEL HELPERS
+   * ===================================================== */
 
   const getCellText = (cell) => {
     if (!cell?.value) {
@@ -531,17 +1081,20 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
             sourceCell.alignment,
           );
 
-        targetCell.border = clone(
-          sourceCell.border,
-        );
+        targetCell.border =
+          clone(
+            sourceCell.border,
+          );
 
-        targetCell.fill = clone(
-          sourceCell.fill,
-        );
+        targetCell.fill =
+          clone(
+            sourceCell.fill,
+          );
 
-        targetCell.font = clone(
-          sourceCell.font,
-        );
+        targetCell.font =
+          clone(
+            sourceCell.font,
+          );
 
         targetCell.protection =
           clone(
@@ -555,60 +1108,9 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
     return targetRow;
   };
 
-  // =====================================================
-  // FORMAT COG
-  // =====================================================
-
-  const formatCog = (
-    cog,
-    cogUnit = "",
-  ) => {
-    if (
-      !Array.isArray(cog) ||
-      cog.length < 3
-    ) {
-      return "";
-    }
-
-    const values = cog
-      .slice(0, 3)
-      .map((value) => {
-        const numericValue =
-          Number(value);
-
-        if (
-          !Number.isFinite(
-            numericValue,
-          )
-        ) {
-          return "";
-        }
-
-        return Math.round(
-          (numericValue +
-            Number.EPSILON) *
-            100,
-        ) / 100;
-      });
-
-    if (
-      values.some(
-        (value) => value === "",
-      )
-    ) {
-      return "";
-    }
-
-    const unitText = cogUnit
-      ? ` ${cogUnit}`
-      : "";
-
-    return `(${values[0]}, ${values[1]}, ${values[2]})${unitText}`;
-  };
-
-  // =====================================================
-  // FILL EXCEL: PLAN -> DATE -> ITEM
-  // =====================================================
+  /* =======================================================
+   * FILL EXCEL: PLAN -> DATE -> ITEM
+   * ===================================================== */
 
   const fillGroups = (
     worksheet,
@@ -618,10 +1120,9 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
       planRowIndex,
       groupRowIndex,
       itemRowIndex,
-    } =
-      findTemplateRows(
-        worksheet,
-      );
+    } = findTemplateRows(
+      worksheet,
+    );
 
     const planTemplateRow =
       planRowIndex;
@@ -643,10 +1144,6 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
           return;
         }
 
-        // =========================
-        // PLAN
-        // =========================
-
         const planRow =
           copyRowTo(
             worksheet,
@@ -660,10 +1157,6 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
         });
 
         insertAt += 1;
-
-        // =========================
-        // DATE GROUPS
-        // =========================
 
         plan.groups.forEach(
           (group) => {
@@ -685,10 +1178,6 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
             });
 
             insertAt += 1;
-
-            // =========================
-            // ITEMS
-            // =========================
 
             items.forEach(
               (
@@ -723,15 +1212,22 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
                     "",
 
                   Length:
-                    item.Length ??
-                    "",
+                    item.Length ?? "",
 
                   Weight:
-                    item.Weight ??
-                    "",
+                    item.Weight ?? "",
 
                   Cog:
                     item.Cog || "",
+
+                  CogX:
+                    item.CogX ?? "",
+
+                  CogY:
+                    item.CogY ?? "",
+
+                  CogZ:
+                    item.CogZ ?? "",
 
                   Comment:
                     item.Comment ||
@@ -744,7 +1240,6 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
           },
         );
 
-        // Empty row between plans
         if (
           planIndex <
           planGroups.length - 1
@@ -760,7 +1255,6 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
       },
     );
 
-    // Remove original template rows
     worksheet.spliceRows(
       planRowIndex,
       itemRowIndex -
@@ -769,9 +1263,9 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
     );
   };
 
-  // =====================================================
-  // DATE PARSER
-  // =====================================================
+  /* =======================================================
+   * DATE PARSER
+   * ===================================================== */
 
   const parseObjectDate = (
     value,
@@ -780,9 +1274,7 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
       return null;
     }
 
-    if (
-      dayjs.isDayjs(value)
-    ) {
+    if (dayjs.isDayjs(value)) {
       return value.isValid()
         ? value
         : null;
@@ -794,9 +1286,7 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
       true,
     );
 
-    if (
-      strictDate.isValid()
-    ) {
+    if (strictDate.isValid()) {
       return strictDate;
     }
 
@@ -808,14 +1298,15 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
       : null;
   };
 
-  // =====================================================
-  // BUILD GROUPS
-  // =====================================================
+  /* =======================================================
+   * BUILD GROUPS
+   * ===================================================== */
 
   const buildGroups = ({
     selectedPlanIds = [],
     startDateValue = null,
     endDateValue = null,
+    formatting = DEFAULT_FORMATTING,
   }) => {
     const planGroups =
       new Map();
@@ -962,19 +1453,66 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
             );
           }
 
-          const weight =
-            Number(obj.weight);
+          const convertedLength =
+            obj.length != null &&
+            Number.isFinite(
+              Number(obj.length),
+            )
+              ? convertLengthFromMm(
+                  obj.length,
+                  formatting,
+                )
+              : "";
 
-          const cogUnit =
-            obj.cogUnit ||
-            obj.lengthUnit ||
-            "";
+          const convertedWeight =
+            obj.weight != null &&
+            Number.isFinite(
+              Number(obj.weight),
+            )
+              ? convertMassFromKg(
+                  obj.weight,
+                  formatting,
+                )
+              : "";
 
-          const cogText =
+          const convertedCog =
             formatCog(
               obj.cog,
-              cogUnit,
+              formatting,
             );
+
+          const cogX =
+            Array.isArray(
+              obj.cog,
+            ) &&
+            obj.cog.length >= 3
+              ? convertLengthFromMm(
+                  obj.cog[0],
+                  formatting,
+                )
+              : "";
+
+          const cogY =
+            Array.isArray(
+              obj.cog,
+            ) &&
+            obj.cog.length >= 3
+              ? convertLengthFromMm(
+                  obj.cog[1],
+                  formatting,
+                )
+              : "";
+
+          const cogZ =
+            Array.isArray(
+              obj.cog,
+            ) &&
+            obj.cog.length >= 3
+              ? convertLengthFromMm(
+                  obj.cog[2],
+                  formatting,
+                )
+              : "";
 
           currentPlan.dates
             .get(dateKey)
@@ -1000,20 +1538,22 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
                 "",
 
               Length:
-                obj.length ?? "",
+                convertedLength,
 
               Weight:
-                Number.isFinite(
-                  weight,
-                )
-                  ? Math.round(
-                      (weight +
-                        Number.EPSILON) *
-                        100,
-                    ) / 100
-                  : "",
+                convertedWeight,
 
-              Cog: cogText,
+              Cog:
+                convertedCog,
+
+              CogX:
+                cogX,
+
+              CogY:
+                cogY,
+
+              CogZ:
+                cogZ,
 
               Comment:
                 obj.comment ||
@@ -1064,8 +1604,7 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
       }))
       .filter(
         (plan) =>
-          plan.groups.length >
-          0,
+          plan.groups.length > 0,
       )
       .sort((a, b) => {
         const orderA =
@@ -1082,9 +1621,9 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
       });
   };
 
-  // =====================================================
-  // OPEN EXPORT MODAL
-  // =====================================================
+  /* =======================================================
+   * OPEN EXPORT MODAL
+   * ===================================================== */
 
   const handleOpenExportModal =
     () => {
@@ -1110,15 +1649,12 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
       }
 
       exportForm.resetFields();
-
-      setExportModalOpen(
-        false,
-      );
+      setExportModalOpen(false);
     };
 
-  // =====================================================
-  // EXPORT EXCEL
-  // =====================================================
+  /* =======================================================
+   * EXPORT EXCEL
+   * ===================================================== */
 
   const handleExportExcel =
     async ({
@@ -1138,39 +1674,38 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
         const projectSettings =
           await tcapi.project.getSettings();
 
-        const formatting =
-          projectSettings?.formatting ||
-          {};
+        console.log(
+          "Project settings:",
+          projectSettings,
+        );
 
-        const firstSequenceObject =
-          sequenceObjects
-            .flatMap(
-              (group) =>
-                group?.objects ||
-                [],
-            )
-            .find(
-              (obj) =>
-                obj?.lengthUnit ||
-                obj?.weightUnit ||
-                obj?.cogUnit,
-            );
+        const formatting =
+          normalizeProjectFormatting(
+            projectSettings?.formatting ||
+              {},
+          );
+
+        console.log(
+          "Project formatting used for Excel:",
+          formatting,
+        );
 
         const lengthUnit =
-          formatting.lengthUnit ||
-          firstSequenceObject?.lengthUnit ||
-          "";
+          getDisplayLengthUnit(
+            formatting,
+          );
 
         const weightUnit =
-          formatting.massUnit ||
-          firstSequenceObject?.weightUnit ||
-          "";
+          getDisplayMassUnit(
+            formatting,
+          );
 
         const groups =
           buildGroups({
             selectedPlanIds,
             startDateValue,
             endDateValue,
+            formatting,
           });
 
         if (!groups.length) {
@@ -1247,6 +1782,26 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
             weightUnit
               ? `Weight (${weightUnit})`
               : "Weight",
+
+          CogTitle:
+            lengthUnit
+              ? `COG (${lengthUnit})`
+              : "COG",
+
+          CogXTitle:
+            lengthUnit
+              ? `COG X (${lengthUnit})`
+              : "COG X",
+
+          CogYTitle:
+            lengthUnit
+              ? `COG Y (${lengthUnit})`
+              : "COG Y",
+
+          CogZTitle:
+            lengthUnit
+              ? `COG Z (${lengthUnit})`
+              : "COG Z",
         });
 
         fillGroups(
@@ -1257,8 +1812,19 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
         const buffer =
           await workbook.xlsx.writeBuffer();
 
+        const safeFileName =
+          String(
+            fileNameInput ||
+              "Sequencing Report",
+          )
+            .trim()
+            .replace(
+              /[<>:"/\\|?*]/g,
+              "_",
+            );
+
         const fileName =
-          `${fileNameInput}.xlsx`;
+          `${safeFileName}.xlsx`;
 
         saveAs(
           new Blob([buffer], {
@@ -1272,10 +1838,7 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
         );
 
         exportForm.resetFields();
-
-        setExportModalOpen(
-          false,
-        );
+        setExportModalOpen(false);
       } catch (error) {
         console.error(
           "Export Excel error:",
@@ -1314,9 +1877,7 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
             null,
         });
       } catch (error) {
-        if (
-          error?.errorFields
-        ) {
+        if (error?.errorFields) {
           return;
         }
 
@@ -1327,13 +1888,12 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
       }
     };
 
-  // =====================================================
-  // JSX
-  // =====================================================
+  /* =======================================================
+   * JSX
+   * ===================================================== */
 
   return (
     <>
-      {/* CREATE PLAN MODAL */}
       <Modal
         title="Create New Plan"
         open={isModalOpen}
@@ -1398,12 +1958,9 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
         </Form>
       </Modal>
 
-      {/* EXPORT EXCEL MODAL */}
       <Modal
         title="Export Excel"
-        open={
-          exportModalOpen
-        }
+        open={exportModalOpen}
         onCancel={
           handleCloseExportModal
         }
@@ -1412,13 +1969,9 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
         }
         okText="Export"
         cancelText="Cancel"
-        confirmLoading={
-          exporting
-        }
+        confirmLoading={exporting}
         destroyOnHidden
-        maskClosable={
-          !exporting
-        }
+        maskClosable={!exporting}
         closable={!exporting}
       >
         <Form
@@ -1553,10 +2106,9 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
               optionFilterProp="label"
               options={plans.map(
                 (plan) => ({
-                  value:
-                    String(
-                      plan.id,
-                    ),
+                  value: String(
+                    plan.id,
+                  ),
 
                   label:
                     plan.name ||
@@ -1610,7 +2162,6 @@ const TopMenu = ({ projectName: projectNameProp = "" }) => {
         </Form>
       </Modal>
 
-      {/* TOP MENU */}
       <Flex
         vertical
         gap={8}
