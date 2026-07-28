@@ -159,7 +159,7 @@ const SortableHeader = ({
       ),
     },
     onCopySubPlan &&
-      phaseCommentId === null && {
+      {
         key: "copySubPlan",
         label: (
           <Button
