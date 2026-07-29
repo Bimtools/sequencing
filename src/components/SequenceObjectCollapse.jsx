@@ -42,6 +42,7 @@ import {
   CloseOutlined,
   CameraOutlined,
   EyeInvisibleOutlined,
+  ZoomInOutlined,
 } from "@ant-design/icons";
 
 import {
@@ -414,6 +415,7 @@ const SortableSubItem = React.memo(
     onAddCamera,
     onChangeCamera,
     onDeleteCamera,
+    onZoomIn,
 
     projectFormatting,
   }) => {
@@ -577,7 +579,6 @@ const SortableSubItem = React.memo(
     const contextMenuItems = [
       {
         key: "assignDate",
-
         label: (
           <div
             style={{
@@ -623,7 +624,16 @@ const SortableSubItem = React.memo(
       {
         type: "divider",
       },
+      {
+        key: "zoomIn",
+        icon: <ZoomInOutlined />,
+        label: "Zoom To Selected",
 
+        onClick: ({ domEvent }) => {
+          domEvent.stopPropagation();
+          onZoomIn(item);
+        },
+      },
       {
         key: "addView",
         icon: <CameraOutlined />,
@@ -962,9 +972,9 @@ const SequenceObjectCollapse = ({
 
       await tcapi.viewer.setSelection(selector, "set");
 
-      await tcapi.viewer.setCamera(selector, {
-        animationTime: 800,
-      });
+      // await tcapi.viewer.setCamera(selector, {
+      //   animationTime: 800,
+      // });
     } catch (error) {
       console.error("Select and zoom objects error:", error);
     }
@@ -1322,6 +1332,72 @@ const SequenceObjectCollapse = ({
     [updateObjectCamera],
   );
 
+  const handleZoomToSelected = useCallback(async () => {
+    try {
+      const tcapi = tcapiRef.current;
+
+      if (!tcapi) {
+        return;
+      }
+
+      const selectedKeys = new Set(
+        selectedIds.map((item) => getObjectKey(item)),
+      );
+
+      const modelGroups = new Map();
+
+      currentObjects.forEach((obj) => {
+        const key = getObjectKey(obj);
+
+        if (!selectedKeys.has(key)) {
+          return;
+        }
+
+        const runtimeId = obj.id ?? obj.runtimeId ?? obj.objectRuntimeId;
+
+        if (obj.modelId == null || runtimeId == null) {
+          return;
+        }
+
+        const modelKey = String(obj.modelId);
+
+        if (!modelGroups.has(modelKey)) {
+          modelGroups.set(modelKey, {
+            modelId: obj.modelId,
+            objectRuntimeIds: [],
+          });
+        }
+
+        modelGroups.get(modelKey).objectRuntimeIds.push(runtimeId);
+      });
+
+      const modelObjectIds = [...modelGroups.values()]
+        .map((group) => ({
+          modelId: group.modelId,
+          objectRuntimeIds: [...new Set(group.objectRuntimeIds)],
+        }))
+        .filter((group) => group.objectRuntimeIds.length > 0);
+
+      if (!modelObjectIds.length) {
+        return;
+      }
+
+      const selector = {
+        modelObjectIds,
+      };
+
+      console.log("Zoom objects:", selector);
+
+      await tcapi.viewer.setSelection(selector, "set");
+
+      await tcapi.viewer.setCamera(selector, {
+        animationTime: 800,
+      });
+    } catch (error) {
+      console.error("Zoom selected objects error:", error);
+    }
+  }, [currentObjects, selectedIds]);
+
   useEffect(() => {
     if (!currentObjects.length) {
       setFocusedIndex(-1);
@@ -1384,6 +1460,7 @@ const SequenceObjectCollapse = ({
                 onAddCamera={handleAddCamera}
                 onChangeCamera={handleChangeCamera}
                 onDeleteCamera={handleDeleteCamera}
+                onZoomIn={handleZoomToSelected}
                 selectObjectsInViewer={selectObjectsInViewer}
                 setActiveItem={setActiveItem}
                 listRef={listRef}

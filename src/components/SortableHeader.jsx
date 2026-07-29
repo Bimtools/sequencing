@@ -158,24 +158,23 @@ const SortableHeader = ({
         </Button>
       ),
     },
-    onCopySubPlan &&
-      {
-        key: "copySubPlan",
-        label: (
-          <Button
-            size="small"
-            type="text"
-            icon={<CopyOutlined />}
-            onClick={(e) => {
-              e.stopPropagation();
-              closeDropdown();
-              onCopySubPlan(plan);
-            }}
-          >
-            Copy Sub Plan
-          </Button>
-        ),
-      },
+    onCopySubPlan && {
+      key: "copySubPlan",
+      label: (
+        <Button
+          size="small"
+          type="text"
+          icon={<CopyOutlined />}
+          onClick={(e) => {
+            e.stopPropagation();
+            closeDropdown();
+            onCopySubPlan(plan);
+          }}
+        >
+          Copy Sub Plan
+        </Button>
+      ),
+    },
     {
       key: "editName",
       label: (
